@@ -13,3 +13,10 @@ mod timeout;
 
 pub use label::Label;
 pub use timeout::Timeout;
+
+mod error;
+mod flags;
+mod ipc;
+
+pub use error::Error;
+pub use ipc::{Dest, IPC};
