@@ -1,0 +1,15 @@
+[package]
+name = "l4-proto-log"
+description = "L4 log / virtual console protocol (L4_PROTO_LOG)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+l4-ipc-core = { path = "../l4-ipc-core" }
+l4-sys = { path = "../l4-sys" }
+
+[features]
+# aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
+cpu-virt = ["l4-ipc-core/cpu-virt"]
