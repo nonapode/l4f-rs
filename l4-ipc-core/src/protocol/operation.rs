@@ -64,7 +64,7 @@ pub fn encode_request<Op: Operation>(utcb: &Utcb, request: &Op::Request<'_>) -> 
     Ok(Tag::new(
         <Op::Proto as Protocol>::PROTO,
         w.words(),
-        0,
+        w.items(),
         Op::TAG_FLAGS,
     ))
 }
@@ -246,6 +246,35 @@ mod tests {
         fn prepare_receive(utcb: &Utcb, _: &TooLong) {
             utcb.set_br(0, 1);
         }
+    }
+
+    /// A request that ends in a map item.
+    struct Mapping;
+    impl Marshal for Mapping {
+        fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
+            w.push(7)?;
+            w.push_item(8, 0x2037)
+        }
+    }
+
+    struct Map;
+    impl Operation for Map {
+        type Proto = Test;
+        const OPCODE: Option<umword> = Some(3);
+        type Request<'a> = Mapping;
+        type Reply = ();
+    }
+
+    #[test]
+    fn the_tag_counts_the_typed_items() {
+        let utcb = Utcb::zeroed();
+        let tag = encode_request::<Map>(&utcb, &Mapping).unwrap();
+
+        assert_eq!((tag.words(), tag.items()), (2, 1));
+        assert_eq!(
+            [utcb.mr(0), utcb.mr(1), utcb.mr(2), utcb.mr(3)],
+            [3, 7, 8, 0x2037]
+        );
     }
 
     #[test]

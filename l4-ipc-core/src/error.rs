@@ -13,4 +13,7 @@ pub enum Error {
     Overflow,
     /// The message is shorter than expected.
     Truncated,
+    /// An untyped word was added after a typed item.  The untyped words of
+    /// a message come first.
+    Misordered,
 }

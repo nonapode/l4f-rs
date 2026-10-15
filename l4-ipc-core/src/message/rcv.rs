@@ -1,3 +1,4 @@
+use super::item::ITEM_MAP;
 use crate::CapIdx;
 use l4_sys::umword;
 
@@ -11,12 +12,9 @@ use l4_sys::umword;
 pub struct RcvCap(umword);
 
 impl RcvCap {
-    /// `L4_ITEM_MAP`: the item is a map item.
-    const ITEM_MAP: umword = 8;
-
     /// `L4_RCV_ITEM_SINGLE_CAP`: the receive window is one capability slot,
     /// which is stored in the upper bits of the item.
-    const SINGLE_CAP: umword = Self::ITEM_MAP | 2;
+    const SINGLE_CAP: umword = ITEM_MAP | 2;
 
     /// Accept one capability and store it in `slot`.
     pub const fn new(slot: CapIdx) -> RcvCap {

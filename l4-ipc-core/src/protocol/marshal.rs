@@ -5,25 +5,54 @@ use l4_sys::{MR_COUNT, Utcb, mword, umword};
 
 const WORD: usize = size_of::<umword>();
 
-/// Sequentially writes untyped words into the message registers.
+/// Sequentially writes the untyped words, followed by the typed items, into
+/// the message registers.
 pub struct Writer<'u> {
     utcb: &'u Utcb,
+    /// The next message register.
     pos: usize,
+    /// The number of untyped words.
+    words: usize,
+    /// The number of typed items, which follow the untyped words.
+    items: usize,
 }
 
 impl<'u> Writer<'u> {
     /// Start writing at message register 0.
     pub fn new(utcb: &'u Utcb) -> Self {
-        Writer { utcb, pos: 0 }
+        Writer {
+            utcb,
+            pos: 0,
+            words: 0,
+            items: 0,
+        }
     }
 
-    /// Append one word.
+    /// Append one untyped word.  Fails with [`Error::Misordered`] once a
+    /// typed item has been added.
     pub fn push(&mut self, word: umword) -> Result<(), Error> {
+        if self.items > 0 {
+            return Err(Error::Misordered);
+        }
         if self.pos >= MR_COUNT {
             return Err(Error::Overflow);
         }
         self.utcb.set_mr(self.pos, word);
         self.pos += 1;
+        self.words += 1;
+        Ok(())
+    }
+
+    /// Append a typed item of two words, the control word and the flexpage.
+    /// Nothing is written if they do not fit.
+    pub fn push_item(&mut self, control: umword, fpage: umword) -> Result<(), Error> {
+        if self.pos + 2 > MR_COUNT {
+            return Err(Error::Overflow);
+        }
+        self.utcb.set_mr(self.pos, control);
+        self.utcb.set_mr(self.pos + 1, fpage);
+        self.pos += 2;
+        self.items += 1;
         Ok(())
     }
 
@@ -38,9 +67,14 @@ impl<'u> Writer<'u> {
         Ok(())
     }
 
-    /// Number of words written so far.
+    /// Number of untyped words written so far.
     pub fn words(&self) -> usize {
-        self.pos
+        self.words
+    }
+
+    /// Number of typed items written so far.
+    pub fn items(&self) -> usize {
+        self.items
     }
 }
 
@@ -157,6 +191,49 @@ impl_tuples! {
 mod tests {
     use super::*;
     use crate::message::TagFlags;
+
+    #[test]
+    fn items_follow_the_untyped_words() {
+        let utcb = Utcb::zeroed();
+        let mut w = Writer::new(&utcb);
+
+        w.push(10).unwrap();
+        w.push(11).unwrap();
+        w.push_item(0xc, 0xf).unwrap();
+        w.push_item(0xd, 0xe).unwrap();
+
+        assert_eq!((w.words(), w.items()), (2, 2));
+        let registers: [umword; 6] = core::array::from_fn(|i| utcb.mr(i));
+        assert_eq!(registers, [10, 11, 0xc, 0xf, 0xd, 0xe]);
+    }
+
+    #[test]
+    fn an_untyped_word_cannot_follow_an_item() {
+        let utcb = Utcb::zeroed();
+        let mut w = Writer::new(&utcb);
+
+        w.push_item(1, 2).unwrap();
+
+        assert_eq!(w.push(3), Err(Error::Misordered));
+        assert_eq!(w.push_bytes(&[1]), Err(Error::Misordered));
+        assert_eq!((w.words(), w.items()), (0, 1));
+        assert_eq!(utcb.mr(2), 0);
+    }
+
+    #[test]
+    fn an_item_that_does_not_fit_is_not_written() {
+        let utcb = Utcb::zeroed();
+        let mut w = Writer::new(&utcb);
+
+        for _ in 0..MR_COUNT - 1 {
+            w.push(1).unwrap();
+        }
+
+        assert_eq!(w.push_item(0xc, 0xf), Err(Error::Overflow));
+        assert_eq!(w.items(), 0);
+        assert_eq!(utcb.mr(MR_COUNT - 1), 0);
+        assert!(w.push(1).is_ok());
+    }
 
     #[test]
     fn words_round_trip() {
