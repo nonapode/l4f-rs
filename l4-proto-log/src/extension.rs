@@ -2,9 +2,9 @@ use l4_ipc_core::protocol::Speaks;
 use l4_ipc_core::{Error, Timeout};
 use l4_sys::Utcb;
 
-use super::Protocol;
-use super::protocol::Bytes;
 use super::operation as op;
+use super::protocol::Bytes;
+use super::Protocol;
 
 /// Convenience methods for handles that speak the log protocol.
 pub trait Log: Speaks<Protocol> {
@@ -145,9 +145,9 @@ impl<H: Speaks<Protocol>> Drop for Console<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use l4_ipc_core::message::TagFlags;
     use l4_ipc_core::protocol::encode_request;
     use l4_sys::{umword, MR_COUNT};
-    use l4_ipc_core::message::TagFlags;
 
     #[test]
     fn write_request_matches_vcon_wire_format() {
@@ -206,7 +206,10 @@ mod tests {
         let mut out = std::vec::Vec::new();
         let text = "x".repeat(2 * Protocol::WRITE_SIZE + 3);
         collect(&mut b, &text, &mut out);
-        assert_eq!(out.iter().map(|c| c.len()).collect::<std::vec::Vec<_>>(), [Protocol::WRITE_SIZE, Protocol::WRITE_SIZE]);
+        assert_eq!(
+            out.iter().map(|c| c.len()).collect::<std::vec::Vec<_>>(),
+            [Protocol::WRITE_SIZE, Protocol::WRITE_SIZE]
+        );
         let mut rest = std::vec::Vec::new();
         b.flush(&mut |bytes| {
             rest.extend_from_slice(bytes);

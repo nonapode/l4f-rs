@@ -1,6 +1,6 @@
-use l4_sys::{mword, umword, MR_COUNT};
 use l4_ipc_core::protocol::{Marshal, Protocol, Writer};
 use l4_ipc_core::Error;
+use l4_sys::{mword, umword, MR_COUNT};
 
 /// The log protocol marker (`L4_PROTO_LOG`).
 pub struct Log;
