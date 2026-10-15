@@ -14,13 +14,14 @@ pastey = "0.2.3"
 default = ["base"]
 
 # Protocol sets.  `base` selects the protocols every L4 system provides;
-# it currently contains `log` only, further protocols (sigma0, scheduler,
-# factory, irq, irq_sender, kobject, task, thread) join it as they are
+# it currently contains `log` and `factory`, further protocols (sigma0,
+# scheduler, irq, irq_sender, kobject, task, thread) join it as they are
 # implemented.
-base = ["proto-log"]
+base = ["proto-log", "proto-factory"]
 
 # Individual protocols.
 proto-log = []
+proto-factory = []
 
 # aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
 cpu-virt = ["l4-ipc-core/cpu-virt"]
