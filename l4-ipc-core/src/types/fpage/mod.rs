@@ -44,12 +44,16 @@ mod marshal;
 mod order;
 mod page;
 mod rights;
+mod snd_base;
 
 pub use error::Error;
 pub use kind::{Any, Io, Kind, Memory, NoRights, Obj, Special};
 pub use order::Order;
 pub use page::{Page, Type};
 pub use rights::{CapRights, MemRights};
+pub use snd_base::{
+    Cacheability, ObjOptions, OffsetField, Options, OptionsField, SndBase, Transfer, TransferField,
+};
 
 /// A flexpage (`l4_fpage_t`) of the kind `K`.
 pub struct Fpage<K = Any>(umword, PhantomData<fn() -> K>);
