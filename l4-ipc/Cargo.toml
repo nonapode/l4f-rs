@@ -1,0 +1,27 @@
+[package]
+name = "l4-ipc"
+description = "L4 IPC: core mechanisms plus feature-selected protocol sets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+l4-ipc-core = { path = "../l4-ipc-core" }
+l4-proto-log = { path = "../l4-proto-log", optional = true }
+paste = "1.0.15"
+
+[features]
+default = []
+
+# Protocol sets.  `base` selects the protocols every L4 system provides;
+# it currently contains `log` only, further `l4-proto-*` crates (sigma0,
+# scheduler, factory, irq, irq_sender, kobject, task, thread) join it as
+# they are implemented.
+base = ["proto-log"]
+
+# Individual protocols.
+proto-log = ["dep:l4-proto-log"]
+
+# aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
+cpu-virt = ["l4-ipc-core/cpu-virt", "l4-proto-log?/cpu-virt"]
