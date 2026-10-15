@@ -24,3 +24,7 @@ compile_error!("l4-sys: unsupported target architecture");
 mod arch;
 
 pub mod syscall;
+
+mod utcb;
+
+pub use utcb::{Utcb, BR_COUNT, MR_COUNT, TLS_COUNT};
