@@ -4,7 +4,10 @@
 //! protocols through cargo features.  `--features base` enables the
 //! protocols every L4 system provides; single protocols
 //! can be enabled by name, e.g. `--features proto-log`.
-#![cfg_attr(not(test), no_std)]
+//!
+//! The handles of the kernel objects are in [`kobject`], the well-known
+//! capabilities of the initial environment in [`base`].
+#![cfg_attr(any(not(test), target_os = "none"), no_std)]
 
 pub use l4_ipc_core::*;
 
@@ -59,6 +62,24 @@ pub mod protocol {
         };
     }
     for_each_protocol!(protocol!);
+}
+
+/// Handles for the kernel objects.  A handle is a capability that is typed
+/// with the protocols its kernel object speaks.
+pub mod kobject {
+    #[allow(unused)]
+    macro_rules! kobject {
+        ($mod:ident, $type:ident) => {
+            mod $mod;
+            pub use $mod::$type;
+        };
+    }
+
+    #[cfg(feature = "proto-factory")]
+    kobject!(factory, Factory);
+
+    #[cfg(feature = "proto-log")]
+    kobject!(vcon, Vcon);
 }
 
 #[cfg(feature = "base")]

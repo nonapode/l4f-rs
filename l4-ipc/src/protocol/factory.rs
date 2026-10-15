@@ -25,6 +25,14 @@ impl Marshal for Limit {
     }
 }
 
+/// A factory can create factories; the limit bounds the kernel memory the
+/// new factory may hand out (`l4_factory_create_factory`).
+impl Creatable for Factory {
+    type Handle = crate::kobject::Factory;
+    type Args<'a> = Limit;
+    type Reply = ();
+}
+
 /// The request of [`Create`]: the capability slot that receives the new
 /// object, and the arguments of the object type.
 pub struct CreateRequest<'a, T: Creatable> {
@@ -147,6 +155,19 @@ mod tests {
         assert_eq!(w.words(), 2);
         assert_eq!(utcb.mr(0), 0x01 | (size_of::<umword>() as umword) << 16);
         assert_eq!(utcb.mr(1), 0x1000);
+    }
+
+    #[test]
+    fn creating_a_factory_sends_the_limit() {
+        let utcb = Utcb::zeroed();
+        let request = CreateRequest::<Factory> {
+            slot: SLOT,
+            args: Limit(0x1000),
+        };
+        let tag = encode_request::<Create<Factory>>(&utcb, &request).unwrap();
+        assert_eq!((tag.label(), tag.words(), tag.items()), (-15, 3, 0));
+        assert_eq!(utcb.mr(0), -15isize as umword); // the created type is a factory
+        assert_eq!(utcb.mr(2), 0x1000);
     }
 
     #[test]
