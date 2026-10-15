@@ -57,6 +57,31 @@ pub fn encode_request<Op: Operation>(utcb: &Utcb, request: &Op::Request<'_>) -> 
     ))
 }
 
+/// Perform `Op` on the capability `idx`: marshal the request, run the IPC
+/// and unmarshal the reply.
+///
+/// A kernel-flagged IPC error becomes `Error::Ipc` (with the UTCB's error
+/// code), a negative reply label of a call `Error::Proto`.
+pub(super) fn invoke_raw<Op: Operation>(
+    idx: CapIdx,
+    utcb: &Utcb,
+    request: Op::Request<'_>,
+    timeout: Timeout,
+) -> Result<Op::Reply, Error> {
+    let tag = encode_request::<Op>(utcb, &request)?;
+    let reply = match Op::INVOCATION {
+        Invocation::Call => IPC::call(idx, tag, timeout),
+        Invocation::Send => IPC::send(idx, tag, timeout),
+    };
+    if reply.has_error() {
+        return Err(Error::Ipc(utcb.error()));
+    }
+    if Op::INVOCATION == Invocation::Call && reply.label() < 0 {
+        return Err(Error::Proto(reply.label()));
+    }
+    Op::Reply::unmarshal(&mut Reader::new(utcb, reply))
+}
+
 /// A capability to an object speaking protocol `P`.
 pub struct Cap<P: Protocol> {
     idx: CapIdx,
@@ -101,18 +126,7 @@ impl<P: Protocol> Cap<P> {
     where
         Op: Operation<Proto = P>,
     {
-        let tag = encode_request::<Op>(utcb, &request)?;
-        let reply = match Op::INVOCATION {
-            Invocation::Call => IPC::call(self.idx, tag, timeout),
-            Invocation::Send => IPC::send(self.idx, tag, timeout),
-        };
-        if reply.has_error() {
-            return Err(Error::Ipc(utcb.error()));
-        }
-        if Op::INVOCATION == Invocation::Call && reply.label() < 0 {
-            return Err(Error::Proto(reply.label()));
-        }
-        Op::Reply::unmarshal(&mut Reader::new(utcb, reply))
+        invoke_raw::<Op>(self.idx, utcb, request, timeout)
     }
 
     /// Perform `Op` using the calling thread's UTCB.
@@ -124,7 +138,7 @@ impl<P: Protocol> Cap<P> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
 
@@ -151,6 +165,28 @@ mod tests {
         assert_eq!(tag.items(), 0);
         assert_eq!(tag.flags(), TagFlags::SCHEDULE);
         assert_eq!((utcb.mr(0), utcb.mr(1), utcb.mr(2)), (7, 3, 4));
+    }
+
+    crate::handle!(TestHandle: Test);
+
+    #[test]
+    fn handle_declares_its_protocols() {
+        use crate::protocol::{RawCap, Speaks};
+        fn needs<H: Speaks<Test>>(h: H) -> CapIdx {
+            h.idx()
+        }
+        assert_eq!(
+            needs(TestHandle::new(CapIdx::from_index(2))),
+            CapIdx::from_index(2)
+        );
+        assert_eq!(
+            needs(RawCap::new(CapIdx::from_index(3))),
+            CapIdx::from_index(3)
+        );
+        assert_eq!(
+            needs(Cap::<Test>::new(CapIdx::from_index(4))),
+            CapIdx::from_index(4)
+        );
     }
 
     #[test]
