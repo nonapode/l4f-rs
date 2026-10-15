@@ -22,3 +22,5 @@ compile_error!("l4-sys: unsupported target architecture");
 #[cfg_attr(target_arch = "arm", path = "arch/arm/mod.rs")]
 #[cfg_attr(target_arch = "x86", path = "arch/x86/mod.rs")]
 mod arch;
+
+pub mod syscall;
