@@ -38,6 +38,20 @@ pub trait Operation {
 
     /// The reply.  Use `()` for operations without reply data.
     type Reply: Unmarshal;
+
+    /// Set up the receive buffers (the buffer descriptor register and the
+    /// buffer registers) for the reply to `request`.
+    ///
+    /// Called for [`Invocation::Call`] only, after the request is marshalled
+    /// and right before the IPC.  The default leaves the buffers alone.
+    fn prepare_receive(_utcb: &Utcb, _request: &Self::Request<'_>) {}
+
+    /// Undo [`prepare_receive`](Operation::prepare_receive).
+    ///
+    /// Called for [`Invocation::Call`] only, right after the IPC, whether it
+    /// succeeded or not.  A receive item that is still set up afterwards
+    /// would accept capabilities from unrelated messages into its slot.
+    fn release_receive(_utcb: &Utcb) {}
 }
 
 /// Write the request of `Op` into `utcb` and return the tag to send.
@@ -81,7 +95,14 @@ fn transact<Op: Operation>(
     ipc: impl FnOnce(Tag) -> Tag,
 ) -> Result<Op::Reply, Error> {
     let tag = encode_request::<Op>(utcb, &request)?;
+    let receives = Op::INVOCATION == Invocation::Call;
+    if receives {
+        Op::prepare_receive(utcb, &request);
+    }
     let reply = ipc(tag);
+    if receives {
+        Op::release_receive(utcb);
+    }
     if reply.has_error() {
         return Err(Error::Ipc(utcb.error()));
     }
@@ -94,6 +115,7 @@ fn transact<Op: Operation>(
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
+    use l4_sys::MR_COUNT;
 
     struct Test;
     impl Protocol for Test {
@@ -166,6 +188,103 @@ mod tests {
         let utcb = Utcb::zeroed();
         let reply = transact::<Notify>(&utcb, (), |_| Tag::new(-5, 0, 0, TagFlags::NONE));
         assert_eq!(reply, Ok(()));
+    }
+
+    /// Opens a receive window in BR0 for the duration of a call and leaves a
+    /// mark in BR1 when it is released.
+    struct Window;
+    impl Operation for Window {
+        type Proto = Test;
+        const OPCODE: Option<umword> = None;
+        type Request<'a> = umword;
+        type Reply = ();
+
+        fn prepare_receive(utcb: &Utcb, request: &umword) {
+            utcb.set_bdr(0xb);
+            utcb.set_br(0, *request);
+        }
+
+        fn release_receive(utcb: &Utcb) {
+            utcb.set_br(0, 0);
+            utcb.set_br(1, 1);
+        }
+    }
+
+    /// Same hooks, but nothing is received.
+    struct SendWindow;
+    impl Operation for SendWindow {
+        type Proto = Test;
+        const OPCODE: Option<umword> = None;
+        const INVOCATION: Invocation = Invocation::Send;
+        type Request<'a> = umword;
+        type Reply = ();
+
+        fn prepare_receive(utcb: &Utcb, request: &umword) {
+            Window::prepare_receive(utcb, request)
+        }
+
+        fn release_receive(utcb: &Utcb) {
+            Window::release_receive(utcb)
+        }
+    }
+
+    /// A request that does not fit into the message registers.
+    struct TooLong;
+    impl Marshal for TooLong {
+        fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
+            (0..=MR_COUNT).try_for_each(|_| w.push(0))
+        }
+    }
+
+    struct Oversized;
+    impl Operation for Oversized {
+        type Proto = Test;
+        const OPCODE: Option<umword> = None;
+        type Request<'a> = TooLong;
+        type Reply = ();
+
+        fn prepare_receive(utcb: &Utcb, _: &TooLong) {
+            utcb.set_br(0, 1);
+        }
+    }
+
+    #[test]
+    fn receive_window_is_open_during_a_call_only() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Window>(&utcb, 0x1a, |_| {
+            assert_eq!((utcb.bdr(), utcb.br(0)), (0xb, 0x1a));
+            assert_eq!(utcb.br(1), 0);
+            Tag::default()
+        });
+        assert_eq!(reply, Ok(()));
+        assert_eq!((utcb.br(0), utcb.br(1)), (0, 1));
+    }
+
+    #[test]
+    fn receive_window_is_released_after_a_failed_call() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Window>(&utcb, 0x1a, |_| Tag::from_raw(0x8000));
+        assert_eq!(reply, Err(Error::Ipc(0)));
+        assert_eq!((utcb.br(0), utcb.br(1)), (0, 1));
+    }
+
+    #[test]
+    fn a_send_has_no_receive_window() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<SendWindow>(&utcb, 0x1a, |_| {
+            assert_eq!((utcb.bdr(), utcb.br(0)), (0, 0));
+            Tag::default()
+        });
+        assert_eq!(reply, Ok(()));
+        assert_eq!((utcb.br(0), utcb.br(1)), (0, 0));
+    }
+
+    #[test]
+    fn no_receive_window_for_a_request_that_does_not_encode() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Oversized>(&utcb, TooLong, |_| unreachable!("not sent"));
+        assert_eq!(reply, Err(Error::Overflow));
+        assert_eq!(utcb.br(0), 0);
     }
 
     crate::handle!(TestHandle: Test);
