@@ -58,7 +58,7 @@ rec {
 
   l4re-src = stdenv.mkDerivation {
     pname = "l4re-source";
-    version = l4re-core-src.rev or "latest";
+    version = l4re-core-src.rev or version;
 
     dontUnpack = true;
     dontBuild = true;
