@@ -4,7 +4,9 @@
 mod handle;
 mod marshal;
 mod operation;
+mod vararg;
 
 pub use handle::{Handle, RawCap, Speaks};
 pub use marshal::{Marshal, Reader, Unmarshal, Writer};
 pub use operation::{encode_request, Invocation, Operation, Protocol};
+pub use vararg::{Int, LStr, Nil, Str, Uint};
