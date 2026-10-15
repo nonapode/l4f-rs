@@ -1,5 +1,5 @@
 use super::operation::invoke_raw;
-use super::{Cap, Operation, Protocol};
+use super::{Operation, Protocol};
 use crate::{CapIdx, Error, Timeout};
 use l4_sys::Utcb;
 
@@ -83,15 +83,6 @@ impl Handle for RawCap {
 }
 
 impl<P: Protocol> Speaks<P> for RawCap {}
-
-// Transitional: `Cap<P>` is a handle that speaks exactly `P`.
-impl<P: Protocol> Handle for Cap<P> {
-    fn idx(&self) -> CapIdx {
-        Cap::idx(self)
-    }
-}
-
-impl<P: Protocol> Speaks<P> for Cap<P> {}
 
 /// Declare a handle type for capabilities that speak the listed protocols.
 ///

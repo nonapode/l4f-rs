@@ -1,8 +1,6 @@
 use super::{Marshal, Reader, Unmarshal, Writer};
 use crate::message::{Tag, TagFlags};
 use crate::{CapIdx, Error, Timeout, IPC};
-use core::fmt;
-use core::marker::PhantomData;
 use l4_sys::{mword, umword, Utcb};
 
 /// An IPC protocol: the label that identifies it in the message tag
@@ -82,62 +80,6 @@ pub(super) fn invoke_raw<Op: Operation>(
     Op::Reply::unmarshal(&mut Reader::new(utcb, reply))
 }
 
-/// A capability to an object speaking protocol `P`.
-pub struct Cap<P: Protocol> {
-    idx: CapIdx,
-    _protocol: PhantomData<fn() -> P>,
-}
-
-impl<P: Protocol> Clone for Cap<P> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<P: Protocol> Copy for Cap<P> {}
-
-impl<P: Protocol> fmt::Debug for Cap<P> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Cap").field(&self.idx).finish()
-    }
-}
-
-impl<P: Protocol> Cap<P> {
-    /// Interpret the capability selector `idx` as speaking protocol `P`.
-    pub const fn new(idx: CapIdx) -> Self {
-        Cap {
-            idx,
-            _protocol: PhantomData,
-        }
-    }
-
-    /// The capability selector.
-    pub const fn idx(&self) -> CapIdx {
-        self.idx
-    }
-
-    /// Perform `Op` using the given UTCB.
-    pub fn invoke_with<Op>(
-        &self,
-        utcb: &Utcb,
-        request: Op::Request<'_>,
-        timeout: Timeout,
-    ) -> Result<Op::Reply, Error>
-    where
-        Op: Operation<Proto = P>,
-    {
-        invoke_raw::<Op>(self.idx, utcb, request, timeout)
-    }
-
-    /// Perform `Op` using the calling thread's UTCB.
-    pub fn invoke<Op>(&self, request: Op::Request<'_>, timeout: Timeout) -> Result<Op::Reply, Error>
-    where
-        Op: Operation<Proto = P>,
-    {
-        self.invoke_with::<Op>(Utcb::current(), request, timeout)
-    }
-}
-
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
@@ -183,16 +125,5 @@ mod tests {
             needs(RawCap::new(CapIdx::from_index(3))),
             CapIdx::from_index(3)
         );
-        assert_eq!(
-            needs(Cap::<Test>::new(CapIdx::from_index(4))),
-            CapIdx::from_index(4)
-        );
-    }
-
-    #[test]
-    fn typed_cap_is_copy() {
-        let cap = Cap::<Test>::new(CapIdx::from_index(1));
-        let copy = cap;
-        assert_eq!(cap.idx(), copy.idx());
     }
 }
