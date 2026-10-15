@@ -33,6 +33,19 @@ use crate::protocol::factory::{Create, CreateRequest, Factory as Protocol};
 /// }
 /// ```
 ///
+/// With the factory capability of the initial environment, a factory with
+/// a limit of 64 KiB of kernel memory is created in a free slot:
+///
+/// ```no_run
+/// use l4_ipc::prelude::*;
+/// use l4_ipc::protocol::{self, factory::Limit};
+/// use l4_ipc::{base, CapIdx};
+///
+/// let sub: base::Factory =
+///     base::FACTORY.create::<protocol::Factory>(CapIdx::from_index(0x20), Limit(0x10000))?;
+/// # Ok::<(), l4_ipc::Error>(())
+/// ```
+///
 /// Only handles that speak the factory protocol can create objects:
 ///
 /// ```compile_fail,E0599
