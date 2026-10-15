@@ -38,6 +38,7 @@ use l4_bitfield::{Access, Bitfield, Field, Marker};
 use l4_sys::umword;
 
 mod error;
+mod flags;
 mod kind;
 mod marshal;
 mod order;
