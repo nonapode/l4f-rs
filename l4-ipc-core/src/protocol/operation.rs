@@ -66,11 +66,22 @@ pub(super) fn invoke_raw<Op: Operation>(
     request: Op::Request<'_>,
     timeout: Timeout,
 ) -> Result<Op::Reply, Error> {
-    let tag = encode_request::<Op>(utcb, &request)?;
-    let reply = match Op::INVOCATION {
+    transact::<Op>(utcb, request, |tag| match Op::INVOCATION {
         Invocation::Call => IPC::call(idx, tag, timeout),
         Invocation::Send => IPC::send(idx, tag, timeout),
-    };
+    })
+}
+
+/// Everything [`invoke_raw`] does around the IPC system call.  `ipc` sends
+/// the request tag and returns the reply tag; it is a parameter so that
+/// tests can stand in for the kernel.
+fn transact<Op: Operation>(
+    utcb: &Utcb,
+    request: Op::Request<'_>,
+    ipc: impl FnOnce(Tag) -> Tag,
+) -> Result<Op::Reply, Error> {
+    let tag = encode_request::<Op>(utcb, &request)?;
+    let reply = ipc(tag);
     if reply.has_error() {
         return Err(Error::Ipc(utcb.error()));
     }
@@ -107,6 +118,54 @@ mod tests {
         assert_eq!(tag.items(), 0);
         assert_eq!(tag.flags(), TagFlags::SCHEDULE);
         assert_eq!((utcb.mr(0), utcb.mr(1), utcb.mr(2)), (7, 3, 4));
+    }
+
+    struct Notify;
+    impl Operation for Notify {
+        type Proto = Test;
+        const OPCODE: Option<umword> = None;
+        const INVOCATION: Invocation = Invocation::Send;
+        type Request<'a> = ();
+        type Reply = ();
+    }
+
+    #[test]
+    fn reply_is_unmarshalled() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Add>(&utcb, (3, 4), |tag| {
+            assert_eq!(tag.words(), 3);
+            utcb.set_mr(0, 7);
+            Tag::new(0, 1, 0, TagFlags::NONE)
+        });
+        assert_eq!(reply, Ok((7,)));
+    }
+
+    #[test]
+    fn short_reply_is_truncated() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Add>(&utcb, (3, 4), |_| Tag::default());
+        assert_eq!(reply, Err(Error::Truncated));
+    }
+
+    #[test]
+    fn kernel_error_carries_the_utcb_error_code() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Add>(&utcb, (3, 4), |_| Tag::from_raw(0x8000));
+        assert_eq!(reply, Err(Error::Ipc(0)));
+    }
+
+    #[test]
+    fn negative_reply_label_of_a_call_is_a_protocol_error() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Add>(&utcb, (3, 4), |_| Tag::new(-5, 0, 0, TagFlags::NONE));
+        assert_eq!(reply, Err(Error::Proto(-5)));
+    }
+
+    #[test]
+    fn send_ignores_the_reply_label() {
+        let utcb = Utcb::zeroed();
+        let reply = transact::<Notify>(&utcb, (), |_| Tag::new(-5, 0, 0, TagFlags::NONE));
+        assert_eq!(reply, Ok(()));
     }
 
     crate::handle!(TestHandle: Test);
