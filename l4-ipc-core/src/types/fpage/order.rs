@@ -10,6 +10,9 @@ use l4_sys::umword;
 pub struct Order(u8);
 
 impl Order {
+    /// A single page, I/O port or capability slot: `1 << 0`.
+    pub const ZERO: Order = Order(0);
+
     /// The size of a memory page (`L4_FPAGE_ADDR_SHIFT`).
     pub const PAGE: Order = Order(12);
 
@@ -61,6 +64,7 @@ mod tests {
 
     #[test]
     fn well_known_orders() {
+        assert_eq!(Order::ZERO.get(), 0);
         assert_eq!(Order::PAGE.get(), 12);
         assert_eq!(Order::WHOLE_IO_SPACE.get(), 16);
         assert_eq!(Order::WHOLE_SPACE.get(), 63);
