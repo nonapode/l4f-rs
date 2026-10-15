@@ -1,7 +1,7 @@
 //! Tuples of [`Input`]s / [`Output`]s: element `i` lives in register `i` of
 //! the architecture's syscall register list.
 
-use super::{syscall, Input, Marker, Output, NUM_REGS};
+use super::{Input, Marker, NUM_REGS, Output, syscall};
 use crate::umword;
 
 mod sealed {

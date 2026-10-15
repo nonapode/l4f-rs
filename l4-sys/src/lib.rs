@@ -27,4 +27,4 @@ pub mod syscall;
 
 mod utcb;
 
-pub use utcb::{Utcb, BR_COUNT, MR_COUNT, TLS_COUNT};
+pub use utcb::{BR_COUNT, MR_COUNT, TLS_COUNT, Utcb};

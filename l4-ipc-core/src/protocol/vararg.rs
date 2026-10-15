@@ -90,7 +90,7 @@ impl Marshal for LStr<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use l4_sys::{Utcb, MR_COUNT};
+    use l4_sys::{MR_COUNT, Utcb};
 
     const W: usize = size_of::<umword>();
 

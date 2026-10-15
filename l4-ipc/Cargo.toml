@@ -3,7 +3,6 @@ name = "l4-ipc"
 description = "L4 IPC: core mechanisms plus feature-selected protocol sets"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]

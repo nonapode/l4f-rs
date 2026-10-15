@@ -1,7 +1,7 @@
 use super::{Marshal, Reader, Unmarshal, Writer};
 use crate::message::{Tag, TagFlags};
-use crate::{CapIdx, Error, Timeout, IPC};
-use l4_sys::{mword, umword, Utcb};
+use crate::{CapIdx, Error, IPC, Timeout};
+use l4_sys::{Utcb, mword, umword};
 
 /// An IPC protocol: the label that identifies it in the message tag
 /// (`L4_PROTO_*`).

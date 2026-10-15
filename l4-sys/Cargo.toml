@@ -3,7 +3,6 @@ name = "l4-sys"
 description = "Raw L4 (Fiasco.OC-style) system call and UTCB layer"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 publish.workspace = true
 
 [features]

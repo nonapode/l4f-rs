@@ -1,7 +1,7 @@
-use crate::message::Tag;
 use crate::Error;
+use crate::message::Tag;
 use core::mem::size_of;
-use l4_sys::{mword, umword, Utcb, MR_COUNT};
+use l4_sys::{MR_COUNT, Utcb, mword, umword};
 
 const WORD: usize = size_of::<umword>();
 

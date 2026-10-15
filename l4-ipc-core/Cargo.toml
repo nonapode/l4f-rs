@@ -3,7 +3,6 @@ name = "l4-ipc-core"
 description = "IPC mechanisms (IPC syscall, message tag, marshalling) on top of l4-sys"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
