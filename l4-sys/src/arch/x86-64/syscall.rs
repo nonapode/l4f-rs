@@ -12,11 +12,12 @@
 //!
 //! The kernel additionally clobbers rdi, rcx, r11 (hardware) and r15.
 
-/// Hand the architecture's syscall register list to `$m`:
-/// `$m!([ <registers> ] <rest>)`.
+/// Hand the architecture's syscall register list to the macro whose path is
+/// given in brackets: `register!([ path::to::mac ] <rest>)` expands to
+/// `path::to::mac!([ <registers> ] <rest>)`.
 macro_rules! register {
-    ($m:path, $($rest:tt)*) => {
-        $m!([ "rax", "rsi", "rdx", "r8" ] $($rest)*)
+    ([ $($m:tt)+ ] $($rest:tt)*) => {
+        $($m)+!([ "rax", "rsi", "rdx", "r8" ] $($rest)*)
     };
 }
 pub(crate) use register;

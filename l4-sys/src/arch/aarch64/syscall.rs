@@ -9,11 +9,12 @@
 //! NOTE: not verified by compilation (no aarch64 core available when this
 //! was written); clobbers beyond x0-x3 are unknown.
 
-/// Hand the architecture's syscall register list to `$m`:
-/// `$m!([ <registers> ] <rest>)`.
+/// Hand the architecture's syscall register list to the macro whose path is
+/// given in brackets: `register!([ path::to::mac ] <rest>)` expands to
+/// `path::to::mac!([ <registers> ] <rest>)`.
 macro_rules! register {
-    ($m:path, $($rest:tt)*) => {
-        $m!([ "x0", "x1", "x2", "x3" ] $($rest)*)
+    ([ $($m:tt)+ ] $($rest:tt)*) => {
+        $($m)+!([ "x0", "x1", "x2", "x3" ] $($rest)*)
     };
 }
 pub(crate) use register;
