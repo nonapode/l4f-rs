@@ -5,3 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+
+[features]
+# aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`
+# (CONFIG_KERNEL_CPU_VIRT).
+cpu-virt = []
