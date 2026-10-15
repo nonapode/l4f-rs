@@ -74,3 +74,6 @@ pub mod protocol {
 
     super::for_each_protocol!(protocol);
 }
+
+#[cfg(feature = "base")]
+pub mod base;
