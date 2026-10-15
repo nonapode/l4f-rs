@@ -7,4 +7,9 @@ pub use l4_sys as sys;
 mod cap;
 
 pub use cap::CapIdx;
+mod label;
 pub mod message;
+mod timeout;
+
+pub use label::Label;
+pub use timeout::Timeout;
