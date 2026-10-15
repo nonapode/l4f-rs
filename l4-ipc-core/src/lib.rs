@@ -7,3 +7,4 @@ pub use l4_sys as sys;
 mod cap;
 
 pub use cap::CapIdx;
+pub mod message;
