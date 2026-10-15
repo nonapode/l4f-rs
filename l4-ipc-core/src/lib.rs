@@ -10,6 +10,7 @@ pub use cap::CapIdx;
 mod label;
 pub mod message;
 mod timeout;
+pub mod types;
 
 pub use label::Label;
 pub use timeout::Timeout;

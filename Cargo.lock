@@ -26,6 +26,7 @@ dependencies = [
 name = "l4-ipc-core"
 version = "0.1.0"
 dependencies = [
+ "l4-bitfield",
  "l4-sys",
 ]
 
