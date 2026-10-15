@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["l4-sys"]
+members = ["l4-sys", "l4-ipc-core"]
 
 [workspace.package]
 version = "0.1.0"

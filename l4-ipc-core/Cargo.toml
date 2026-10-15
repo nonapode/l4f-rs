@@ -1,0 +1,14 @@
+[package]
+name = "l4-ipc-core"
+description = "IPC mechanisms (IPC syscall, message tag, marshalling) on top of l4-sys"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+l4-sys = { path = "../l4-sys" }
+
+[features]
+# aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
+cpu-virt = ["l4-sys/cpu-virt"]
