@@ -1,5 +1,10 @@
 //! Typed bitfields: a bitfield is a storage word, a field is a bit range with
 //! a codec that converts between the bits and a value type.
+//!
+//! The bounds of the field traits are generic constant expressions, so a
+//! crate that reads or writes fields needs `#![feature(generic_const_exprs)]`
+//! as well.
+#![cfg_attr(any(not(test), target_os = "none"), no_std)]
 #![feature(generic_const_exprs)]
 #![allow(incomplete_features)]
 
@@ -291,114 +296,189 @@ where
 
 // ============================================================
 // Field descriptor
+//
+// A field is a type, never a value: name it with an alias and
+// access it through `Access`, e.g.
+//
+//     type Enabled = Field<Flags, bool, 0, 1>;
+//     flags.set::<Enabled>(&true);
+//     let enabled = flags.get::<Enabled>();
 // ============================================================
 
-pub struct Field<B, V, const LHS: usize, const RHS: usize, C = DefaultCodec> {
-    _marker: PhantomData<fn() -> (B, V, C)>,
-}
-
-impl<B, V, const LHS: usize, const RHS: usize, C> Copy for Field<B, V, LHS, RHS, C> {}
-
-impl<B, V, const LHS: usize, const RHS: usize, C> Clone for Field<B, V, LHS, RHS, C> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<B, V, const LHS: usize, const RHS: usize, C> Default for Field<B, V, LHS, RHS, C> {
-    fn default() -> Self {
-        Self {
-            _marker: PhantomData,
-        }
-    }
+/// The bit range `LHS..RHS` of the bitfield `B`, holding a value of type
+/// `V` that is converted by the codec `C`.
+///
+/// The type cannot be instantiated.  It only names a field, which is read
+/// and written through [`Access`].
+pub enum Field<B, V, const LHS: usize, const RHS: usize, C = DefaultCodec> {
+    #[doc(hidden)]
+    Never(core::convert::Infallible, PhantomData<fn() -> (B, V, C)>),
 }
 
 impl<B, V, const LHS: usize, const RHS: usize, C> Field<B, V, LHS, RHS, C>
 where
     B: Bitfield,
-    B::Type: Word,
-    [(); RHS - LHS]:,
 {
-    fn check_range() {
-        assert!(LHS <= RHS, "invalid field range");
-        assert!(RHS <= B::Type::BITS, "field exceeds storage width");
-    }
+    /// Evaluated when a field is used: the range must be valid and fit into
+    /// the storage word.
+    const RANGE_IS_VALID: () = assert!(
+        LHS <= RHS && RHS <= <B::Type as Word>::BITS,
+        "invalid field range"
+    );
 
     fn mask() -> B::Type {
+        let () = Self::RANGE_IS_VALID;
         B::Type::mask(RHS - LHS).shl(LHS)
     }
 
-    pub fn get(&self, bitfield: &B) -> V
-    where
-        C: Codec<B, V, LHS, RHS>,
-        C::Decoder: Decoder<B, LHS, RHS, Value = V>,
-    {
-        Self::check_range();
-
-        let raw = *bitfield.raw(Marker::new());
-        let bits = Bitmask::new(raw.and(Self::mask()));
-
-        <C::Decoder as Decoder<B, LHS, RHS>>::decode(bits, Marker::new())
+    fn masked(bitfield: &B) -> Bitmask<B::Type, LHS, RHS> {
+        Bitmask::new(bitfield.raw(Marker::new()).and(Self::mask()))
     }
 
-    pub fn try_get(
-        &self,
-        bitfield: &B,
-    ) -> Result<V, <C::TryDecoder as TryDecoder<B, LHS, RHS>>::Error>
-    where
-        C: Codec<B, V, LHS, RHS>,
-        C::TryDecoder: TryDecoder<B, LHS, RHS, Value = V>,
-    {
-        Self::check_range();
-
-        let raw = *bitfield.raw(Marker::new());
-        let bits = Bitmask::new(raw.and(Self::mask()));
-
-        <C::TryDecoder as TryDecoder<B, LHS, RHS>>::try_decode(bits, Marker::new())
-    }
-
-    pub fn set<'a>(&self, bitfield: &'a mut B, value: &V) -> &'a mut B
-    where
-        C: Codec<B, V, LHS, RHS>,
-        C::Encoder: Encoder<B, LHS, RHS, Value = V>,
-    {
-        Self::check_range();
-
-        let encoded =
-            <C::Encoder as Encoder<B, LHS, RHS>>::encode(value, Marker::new()).into_inner();
-
+    fn replace(bitfield: &mut B, encoded: B::Type) {
         let raw = *bitfield.raw(Marker::new());
         let cleared = raw.and(Self::mask().not());
         let updated = cleared.or(encoded.and(Self::mask()));
 
         *bitfield = B::from_raw(updated, Marker::new());
-        bitfield
-    }
-
-    pub fn try_set<'a>(
-        &self,
-        bitfield: &'a mut B,
-        value: &V,
-    ) -> Result<&'a mut B, <C::TryEncoder as TryEncoder<B, LHS, RHS>>::Error>
-    where
-        C: Codec<B, V, LHS, RHS>,
-        C::TryEncoder: TryEncoder<B, LHS, RHS, Value = V>,
-    {
-        Self::check_range();
-
-        let encoded = <C::TryEncoder as TryEncoder<B, LHS, RHS>>::try_encode(value, Marker::new())?
-            .into_inner();
-
-        let raw = *bitfield.raw(Marker::new());
-        let cleared = raw.and(Self::mask().not());
-        let updated = cleared.or(encoded.and(Self::mask()));
-
-        *bitfield = B::from_raw(updated, Marker::new());
-        Ok(bitfield)
     }
 }
 
-#[cfg(test)]
+/// A field that can be read.
+pub trait Read {
+    type Bitfield: Bitfield;
+    type Value;
+
+    fn read(bitfield: &Self::Bitfield) -> Self::Value;
+}
+
+/// A field that can be read, but not every bit pattern is a valid value.
+pub trait TryRead {
+    type Bitfield: Bitfield;
+    type Value;
+    type Error;
+
+    fn try_read(bitfield: &Self::Bitfield) -> Result<Self::Value, Self::Error>;
+}
+
+/// A field that can be written.
+pub trait Write {
+    type Bitfield: Bitfield;
+    type Value;
+
+    fn write(bitfield: &mut Self::Bitfield, value: &Self::Value);
+}
+
+/// A field that can be written, but not every value can be encoded.  The
+/// bitfield is left unchanged on an error.
+pub trait TryWrite {
+    type Bitfield: Bitfield;
+    type Value;
+    type Error;
+
+    fn try_write(bitfield: &mut Self::Bitfield, value: &Self::Value) -> Result<(), Self::Error>;
+}
+
+impl<B, V, const LHS: usize, const RHS: usize, C> Read for Field<B, V, LHS, RHS, C>
+where
+    B: Bitfield,
+    [(); RHS - LHS]:,
+    C: Codec<B, V, LHS, RHS>,
+    C::Decoder: Decoder<B, LHS, RHS, Value = V>,
+{
+    type Bitfield = B;
+    type Value = V;
+
+    fn read(bitfield: &B) -> V {
+        <C::Decoder as Decoder<B, LHS, RHS>>::decode(Self::masked(bitfield), Marker::new())
+    }
+}
+
+impl<B, V, const LHS: usize, const RHS: usize, C> TryRead for Field<B, V, LHS, RHS, C>
+where
+    B: Bitfield,
+    [(); RHS - LHS]:,
+    C: Codec<B, V, LHS, RHS>,
+    C::TryDecoder: TryDecoder<B, LHS, RHS, Value = V>,
+{
+    type Bitfield = B;
+    type Value = V;
+    type Error = <C::TryDecoder as TryDecoder<B, LHS, RHS>>::Error;
+
+    fn try_read(bitfield: &B) -> Result<V, Self::Error> {
+        <C::TryDecoder as TryDecoder<B, LHS, RHS>>::try_decode(
+            Self::masked(bitfield),
+            Marker::new(),
+        )
+    }
+}
+
+impl<B, V, const LHS: usize, const RHS: usize, C> Write for Field<B, V, LHS, RHS, C>
+where
+    B: Bitfield,
+    [(); RHS - LHS]:,
+    C: Codec<B, V, LHS, RHS>,
+    C::Encoder: Encoder<B, LHS, RHS, Value = V>,
+{
+    type Bitfield = B;
+    type Value = V;
+
+    fn write(bitfield: &mut B, value: &V) {
+        let encoded =
+            <C::Encoder as Encoder<B, LHS, RHS>>::encode(value, Marker::new()).into_inner();
+
+        Self::replace(bitfield, encoded);
+    }
+}
+
+impl<B, V, const LHS: usize, const RHS: usize, C> TryWrite for Field<B, V, LHS, RHS, C>
+where
+    B: Bitfield,
+    [(); RHS - LHS]:,
+    C: Codec<B, V, LHS, RHS>,
+    C::TryEncoder: TryEncoder<B, LHS, RHS, Value = V>,
+{
+    type Bitfield = B;
+    type Value = V;
+    type Error = <C::TryEncoder as TryEncoder<B, LHS, RHS>>::Error;
+
+    fn try_write(bitfield: &mut B, value: &V) -> Result<(), Self::Error> {
+        let encoded = <C::TryEncoder as TryEncoder<B, LHS, RHS>>::try_encode(value, Marker::new())?
+            .into_inner();
+
+        Self::replace(bitfield, encoded);
+        Ok(())
+    }
+}
+
+/// Reads and writes the fields of a bitfield; import it to call
+/// `bitfield.get::<Field>()` and friends.
+pub trait Access: Bitfield + Sized {
+    fn get<F: Read<Bitfield = Self>>(&self) -> F::Value {
+        F::read(self)
+    }
+
+    fn try_get<F: TryRead<Bitfield = Self>>(&self) -> Result<F::Value, F::Error> {
+        F::try_read(self)
+    }
+
+    fn set<F: Write<Bitfield = Self>>(&mut self, value: &F::Value) -> &mut Self {
+        F::write(self, value);
+        self
+    }
+
+    fn try_set<F: TryWrite<Bitfield = Self>>(
+        &mut self,
+        value: &F::Value,
+    ) -> Result<&mut Self, F::Error> {
+        F::try_write(self, value)?;
+        Ok(self)
+    }
+}
+
+impl<B: Bitfield> Access for B {}
+
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     extern crate std;
     use super::*;
@@ -450,13 +530,9 @@ mod tests {
         }
     }
 
-    pub const ENABLED: Field<Flags, bool, 0, 1> = Field {
-        _marker: PhantomData,
-    };
+    pub type Enabled = Field<Flags, bool, 0, 1>;
 
-    pub const MODE: Field<Flags, u8, 1, 3> = Field {
-        _marker: PhantomData,
-    };
+    pub type Mode2 = Field<Flags, u8, 1, 3>;
 
     // ============================================================
     // Example custom decoder with default encoding
@@ -512,9 +588,38 @@ mod tests {
         }
     }
 
-    pub const CUSTOM_MODE: Field<Flags, Mode, 1, 3, ModeCodec> = Field {
-        _marker: PhantomData,
-    };
+    pub type CustomMode = Field<Flags, Mode, 1, 3, ModeCodec>;
+
+    // ============================================================
+    // Example fallible encoding
+    // ============================================================
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct Level(u8);
+
+    impl TryEncode<u8, 2> for Level {
+        type Error = &'static str;
+
+        fn try_encode(&self) -> Result<Bits<u8, 2>, Self::Error> {
+            match self.0 {
+                0..=2 => Ok(Bits::new(self.0)),
+                _ => Err("level out of range"),
+            }
+        }
+    }
+
+    impl TryDecode<u8, 2> for Level {
+        type Error = &'static str;
+
+        fn try_decode(bits: Bits<u8, 2>) -> Result<Self, Self::Error> {
+            match bits.into_inner() {
+                0..=2 => Ok(Level(bits.into_inner())),
+                _ => Err("level out of range"),
+            }
+        }
+    }
+
+    pub type LevelBits = Field<Flags, Level, 3, 5>;
 
     // ============================================================
     // Demonstration
@@ -524,11 +629,10 @@ mod tests {
     fn reads_and_writes_fields() {
         let mut flags = Flags(0);
 
-        ENABLED.set(&mut flags, &true);
-        MODE.set(&mut flags, &2);
+        flags.set::<Enabled>(&true).set::<Mode2>(&2);
 
-        assert!(ENABLED.get(&flags));
-        assert_eq!(MODE.get(&flags), 2);
+        assert!(flags.get::<Enabled>());
+        assert_eq!(flags.get::<Mode2>(), 2);
         assert_eq!(flags.0, 0b101);
     }
 
@@ -536,24 +640,55 @@ mod tests {
     fn custom_decoder_is_selected() {
         let mut flags = Flags(0);
 
-        CUSTOM_MODE.set(&mut flags, &Mode::On);
+        flags.set::<CustomMode>(&Mode::On);
 
-        assert_eq!(CUSTOM_MODE.get(&flags), Mode::On);
-        assert_eq!(CUSTOM_MODE.try_get(&flags), Ok(Mode::On));
+        assert_eq!(flags.get::<CustomMode>(), Mode::On);
+        assert_eq!(flags.try_get::<CustomMode>(), Ok(Mode::On));
     }
 
     #[test]
     fn try_decode_can_reject_invalid_values() {
         let flags = Flags(0b110);
 
-        assert_eq!(CUSTOM_MODE.try_get(&flags), Err("invalid mode"));
+        assert_eq!(flags.try_get::<CustomMode>(), Err("invalid mode"));
     }
 
     #[test]
     fn setters_preserve_unrelated_bits() {
         let mut flags = Flags(0b1111_1000);
 
-        ENABLED.set(&mut flags, &true);
+        flags.set::<Enabled>(&true);
+
+        assert_eq!(flags.0, 0b1111_1001);
+    }
+
+    #[test]
+    fn try_set_writes_valid_values() {
+        let mut flags = Flags(0b0000_0001);
+
+        assert!(flags.try_set::<LevelBits>(&Level(2)).is_ok());
+
+        assert_eq!(flags.0, 0b0001_0001);
+        assert_eq!(flags.try_get::<LevelBits>(), Ok(Level(2)));
+    }
+
+    #[test]
+    fn try_set_leaves_the_bitfield_alone_on_error() {
+        let mut flags = Flags(0b1010_1010);
+
+        assert_eq!(
+            flags.try_set::<LevelBits>(&Level(3)).map(|_| ()),
+            Err("level out of range")
+        );
+
+        assert_eq!(flags.0, 0b1010_1010);
+    }
+
+    #[test]
+    fn fields_are_independent_of_the_value_width() {
+        let mut flags = Flags(0xff);
+
+        flags.set::<Mode2>(&0);
 
         assert_eq!(flags.0, 0b1111_1001);
     }
