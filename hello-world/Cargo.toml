@@ -1,0 +1,12 @@
+[package]
+name = "hello-world"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+l4-sys = { path = "../l4-sys" }
+l4-ipc = { path = "../l4-ipc", features=["base"] }
+
+[[bin]]
+name = "hello-world"
+test = false
