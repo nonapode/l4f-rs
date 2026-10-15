@@ -39,6 +39,7 @@ use l4_sys::umword;
 
 mod error;
 mod kind;
+mod marshal;
 mod order;
 mod page;
 mod rights;

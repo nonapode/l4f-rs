@@ -5,18 +5,19 @@
 //! Every argument starts with a header word that holds the type in its low
 //! bits and the payload length in bytes from bit 16 on.  The payload
 //! follows in whole words, the last one padded with zeros.
-//!
-//! The flexpage argument (`L4_VARG_TYPE_FPAGE`) is not supported yet.
 
 use super::{Marshal, Writer};
 use crate::Error;
+use crate::types::Fpage;
 use core::ffi::CStr;
+use core::fmt;
 use core::mem::size_of;
 use l4_sys::{mword, umword};
 
 const NIL: umword = 0x00;
 const UMWORD: umword = 0x01;
 const STRING: umword = 0x02;
+const FPAGE: umword = 0x03;
 const SIGN: umword = 0x80;
 const MWORD: umword = UMWORD | SIGN;
 
@@ -87,7 +88,31 @@ impl Marshal for LStr<'_> {
     }
 }
 
-#[cfg(test)]
+/// A flexpage (`L4_VARG_TYPE_FPAGE`).
+pub struct Flexpage<K>(pub Fpage<K>);
+
+impl<K> Clone for Flexpage<K> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<K> Copy for Flexpage<K> {}
+
+impl<K> fmt::Debug for Flexpage<K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("Flexpage").field(&self.0).finish()
+    }
+}
+
+impl<K> Marshal for Flexpage<K> {
+    fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
+        w.push(header(FPAGE, size_of::<umword>())?)?;
+        self.0.marshal(w)
+    }
+}
+
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
     use l4_sys::{MR_COUNT, Utcb};
@@ -161,6 +186,16 @@ mod tests {
         let (utcb, words) = encode(&LStr(b""));
         assert_eq!(words, Ok(1));
         assert_eq!(utcb.mr(0), 0x02);
+    }
+
+    #[test]
+    fn flexpage_is_a_word_after_a_header() {
+        use crate::types::fpage::{Fpage, Special};
+
+        let (utcb, words) = encode(&Flexpage(Fpage::<Special>::all()));
+        assert_eq!(words, Ok(2));
+        assert_eq!(utcb.mr(0), 0x03 | (W as umword) << 16);
+        assert_eq!(utcb.mr(1), 63 << 6);
     }
 
     #[test]

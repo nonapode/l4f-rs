@@ -11,4 +11,4 @@ pub use creatable::Creatable;
 pub use handle::{Handle, RawCap, Speaks};
 pub use marshal::{Marshal, Reader, Unmarshal, Writer};
 pub use operation::{Invocation, Operation, Protocol, encode_request};
-pub use vararg::{Int, LStr, Nil, Str, Uint};
+pub use vararg::{Flexpage, Int, LStr, Nil, Str, Uint};
