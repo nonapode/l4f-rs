@@ -1,0 +1,15 @@
+[workspace]
+resolver = "2"
+members = ["l4-sys"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+publish = false
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
