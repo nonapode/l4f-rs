@@ -1,6 +1,5 @@
-use crate::protocol::Log;
-use l4_ipc_core::protocol::Cap;
-use l4_ipc_core::CapIdx;
+use super::protocol;
+use l4_ipc_core::{handle, CapIdx};
 
 pub struct Index;
 
@@ -17,4 +16,10 @@ impl Index {
     pub const ARM_SMCCC: CapIdx = CapIdx::from_index(11usize);
 }
 
-pub const LOG: Cap<Log> = Cap::<Log>::new(Index::LOG);
+handle!(
+    /// A virtual console, the kernel object behind the log capability.
+    /// Further protocols are added here as their crates appear.
+    pub Vcon: protocol::Log
+);
+
+pub const LOG: Vcon = Vcon::new(Index::LOG);
