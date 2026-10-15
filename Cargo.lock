@@ -11,6 +11,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "l4-bitfield"
+version = "0.1.0"
+
+[[package]]
 name = "l4-ipc"
 version = "0.1.0"
 dependencies = [
