@@ -1,16 +1,14 @@
 use l4_ipc_core::protocol::Speaks;
 use l4_ipc_core::{Error, Timeout};
-use l4_sys::Utcb;
+use l4_ipc_core::sys::Utcb;
 
-use super::operation as op;
-use super::protocol::Bytes;
-use super::Protocol;
+use crate::protocol::log::{Log as Protocol, Bytes, Write};
 
 /// Convenience methods for handles that speak the log protocol.
 pub trait Log: Speaks<Protocol> {
     /// Write `bytes` (at most [`Protocol::WRITE_SIZE`]) using the given UTCB.
     fn write_with(&self, utcb: &Utcb, bytes: &[u8]) -> Result<(), Error> {
-        self.invoke_with::<op::Write>(utcb, Bytes(bytes), Timeout::NEVER)
+        self.invoke_with::<Write>(utcb, Bytes(bytes), Timeout::NEVER)
     }
 
     /// Write `text` in as many messages as needed using the given UTCB.
@@ -142,17 +140,18 @@ impl<H: Speaks<Protocol>> Drop for Console<H> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
-    use l4_ipc_core::message::TagFlags;
+    use core::mem::size_of;
     use l4_ipc_core::protocol::encode_request;
-    use l4_sys::{umword, MR_COUNT};
+    use l4_ipc_core::sys::{umword, MR_COUNT};
+    use l4_ipc_core::message::TagFlags;
 
     #[test]
     fn write_request_matches_vcon_wire_format() {
         let utcb = Utcb::zeroed();
-        let tag = encode_request::<op::Write>(&utcb, &Bytes(b"hello")).unwrap();
+        let tag = encode_request::<Write>(&utcb, &Bytes(b"hello")).unwrap();
 
         assert_eq!(tag.label(), -13);
         assert_eq!(tag.words(), 3); // opcode, size, one word of text
@@ -170,12 +169,12 @@ mod tests {
     fn maximum_write_fits_exactly() {
         let utcb = Utcb::zeroed();
         let max = [b'x'; Protocol::WRITE_SIZE];
-        let tag = encode_request::<op::Write>(&utcb, &Bytes(&max)).unwrap();
+        let tag = encode_request::<Write>(&utcb, &Bytes(&max)).unwrap();
         assert_eq!(tag.words(), MR_COUNT);
 
         let too_long = [b'x'; Protocol::WRITE_SIZE + 1];
         assert_eq!(
-            encode_request::<op::Write>(&utcb, &Bytes(&too_long)),
+            encode_request::<Write>(&utcb, &Bytes(&too_long)),
             Err(Error::Overflow)
         );
     }
@@ -206,10 +205,7 @@ mod tests {
         let mut out = std::vec::Vec::new();
         let text = "x".repeat(2 * Protocol::WRITE_SIZE + 3);
         collect(&mut b, &text, &mut out);
-        assert_eq!(
-            out.iter().map(|c| c.len()).collect::<std::vec::Vec<_>>(),
-            [Protocol::WRITE_SIZE, Protocol::WRITE_SIZE]
-        );
+        assert_eq!(out.iter().map(|c| c.len()).collect::<std::vec::Vec<_>>(), [Protocol::WRITE_SIZE, Protocol::WRITE_SIZE]);
         let mut rest = std::vec::Vec::new();
         b.flush(&mut |bytes| {
             rest.extend_from_slice(bytes);

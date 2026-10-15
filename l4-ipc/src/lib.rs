@@ -1,78 +1,64 @@
 //! L4 IPC.
 //!
 //! This crate re-exports the mechanisms of `l4-ipc-core` and selects
-//! protocol crates (`l4-proto-*`) through cargo features.  `--features
-//! base` enables the protocols every L4 system provides; single protocols
-//! can be enabled by name, e.g. `--features log`.
+//! protocols through cargo features.  `--features base` enables the
+//! protocols every L4 system provides; single protocols
+//! can be enabled by name, e.g. `--features proto-log`.
 #![cfg_attr(not(test), no_std)]
 
 pub use l4_ipc_core::*;
 
 macro_rules! for_each_protocol {
-    ( $macro:ident ) => {
-        $crate::for_each_protocol!($macro =>
-            //irq => Irq,
-            //semaphore => Semaphore,
-            Log,
-            //ipc => Ipc,
-        );
+    ( $macro:ident !) => {
+        for_each_protocol!($macro ! ( ? ));
     };
 
-    ( $macro:ident => $( $snake:ident ),* $(,)? ) => {
-        $(
-            paste::paste! {
-                $macro!(#[cfg(feature = "proto-" $snake:snake ) ]
-                        [<l4_proto_ $snake:snake >]
-                        [< $snake:snake >]
-                        [< $snake:camel >]
-                );
-            }
-        )*
+    ($macro:ident ! ( $($prefix:expr, )* ? $(, $suffix:expr)* )) => {
+        for_each_protocol!(Log => $macro ! ( $($prefix ,)* ? $(, $suffix)*));
     };
+
+    ($current:ident $(, $next:ident)* => $macro:ident ! ( $($prefix:expr ,)* ? $(, $suffix:expr)* )) => {
+       pastey::paste! {
+           #[cfg(feature = "proto-" $current:snake)]
+           $macro!($($prefix,)* [<$current:snake>], [<$current:camel>] $(, $suffix)*);
+        }
+       for_each_protocol!($($next),* => $macro ! ( $($prefix ,)* ? $(, $suffix)* ));
+    };
+
+    ( => $macro:ident ! ( $($prefix:expr ,)* ? $(, $suffix:expr)* )) => {};
 }
-
-pub(crate) use for_each_protocol;
 
 /// prelude module.
 pub mod prelude {
+    #[allow(unused)]
     macro_rules! prelude {
-        (#[$meta:meta] $root:ident $snake:ident $camel:ident ) => {
-            #[$meta]
-            pub use $root::Extension as _; // bring extension in scope
+        ($snake:ident, $camel:ident ) => {
+            pub use crate::extension::$camel as _;
         };
     }
-    crate::for_each_protocol!(prelude);
+    for_each_protocol!(prelude!);
 }
 
-/// IPC extensions.
 pub mod extension {
     #[allow(unused)]
     macro_rules! extension {
-        (#[$meta:meta] $root:ident $snake:ident $camel:ident) => {
-            #[$meta]
-            pub use $root::Extension as $camel;
-
-            #[$meta]
-            pub use $root::extension as $snake;
+        ($snake:ident, $camel:ident) => {
+            mod $snake;
+            pub use $snake::$camel;
         };
     }
-    super::for_each_protocol!(extension);
+    for_each_protocol!(extension!);
 }
 
-/// IPC protocols.
 pub mod protocol {
     #[allow(unused)]
     macro_rules! protocol {
-        (#[$meta:meta] $root:ident $snake:ident $camel:ident ) => {
-            #[$meta]
-            pub use $root::Protocol as $camel;
-
-            #[$meta]
-            pub use $root::protocol as $snake;
+        ($snake:ident, $camel:ident) => {
+            pub mod $snake;
+            pub use $snake::$camel;
         };
     }
-
-    super::for_each_protocol!(protocol);
+    for_each_protocol!(protocol!);
 }
 
 #[cfg(feature = "base")]
