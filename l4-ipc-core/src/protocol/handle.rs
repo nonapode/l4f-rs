@@ -84,6 +84,12 @@ impl Handle for RawCap {
 
 impl<P: Protocol> Speaks<P> for RawCap {}
 
+impl From<CapIdx> for RawCap {
+    fn from(idx: CapIdx) -> Self {
+        RawCap(idx)
+    }
+}
+
 /// Declare a handle type for capabilities that speak the listed protocols.
 ///
 /// ```
@@ -101,6 +107,7 @@ impl<P: Protocol> Speaks<P> for RawCap {}
 ///
 /// let v = Vcon::new(CapIdx::from_index(5));
 /// assert_eq!(v.idx(), CapIdx::from_index(5));
+/// assert_eq!(Vcon::from(CapIdx::from_index(5)), v);
 /// ```
 #[macro_export]
 macro_rules! handle {
@@ -112,6 +119,12 @@ macro_rules! handle {
         impl $name {
             /// Wrap a capability selector.
             $vis const fn new(idx: $crate::CapIdx) -> Self {
+                $name(idx)
+            }
+        }
+
+        impl ::core::convert::From<$crate::CapIdx> for $name {
+            fn from(idx: $crate::CapIdx) -> Self {
                 $name(idx)
             }
         }

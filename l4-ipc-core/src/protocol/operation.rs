@@ -290,6 +290,14 @@ mod tests {
     crate::handle!(TestHandle: Test);
 
     #[test]
+    fn handles_are_built_from_selectors() {
+        use crate::protocol::RawCap;
+        let idx = CapIdx::from_index(4);
+        assert_eq!(TestHandle::from(idx), TestHandle::new(idx));
+        assert_eq!(RawCap::from(idx), RawCap::new(idx));
+    }
+
+    #[test]
     fn handle_declares_its_protocols() {
         use crate::protocol::{RawCap, Speaks};
         fn needs<H: Speaks<Test>>(h: H) -> CapIdx {
