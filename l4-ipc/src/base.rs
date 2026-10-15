@@ -1,6 +1,6 @@
 //! The well-known capabilities of the initial environment.
 
-use super::kobject::{Factory, Vcon};
+use super::kobject::{Factory, Task, Vcon};
 use l4_ipc_core::CapIdx;
 
 pub struct Index;
@@ -18,6 +18,8 @@ impl Index {
     pub const ARM_SMCCC: CapIdx = CapIdx::from_index(11usize);
 }
 
+pub const TASK: Task = Task::new(Index::TASK);
+
 pub const LOG: Vcon = Vcon::new(Index::LOG);
 
 pub const FACTORY: Factory = Factory::new(Index::FACTORY);
@@ -30,5 +32,10 @@ mod tests {
     #[test]
     fn the_factory_capability_is_at_its_well_known_slot() {
         assert_eq!(FACTORY.idx(), CapIdx::from_index(2));
+    }
+
+    #[test]
+    fn the_task_capability_is_at_its_well_known_slot() {
+        assert_eq!(TASK.idx(), CapIdx::from_index(1));
     }
 }

@@ -74,8 +74,9 @@ pub trait Factory: Speaks<Protocol> {
     ///
     /// The kernel stores the capability of the new object in `slot`, which
     /// has to be a free slot of the capability space; the returned handle
-    /// wraps it.  Creating objects that return data besides the capability
-    /// (`T::Reply` is not `()`) needs [`Create`] with `invoke_with`.
+    /// wraps it.  Objects that return data besides the capability
+    /// (`T::Reply` is not `()`) are created with
+    /// [`create_returning_with`](Factory::create_returning_with).
     fn create_with<T>(
         &self,
         utcb: &Utcb,
@@ -97,6 +98,37 @@ pub trait Factory: Speaks<Protocol> {
     {
         self.create_with::<T>(Utcb::current(), slot, args)
     }
+
+    /// Create an object of type `T` that returns data besides its
+    /// capability, e.g. a task, using the given UTCB.  The data is the
+    /// second element of the result.
+    fn create_returning_with<T>(
+        &self,
+        utcb: &Utcb,
+        slot: CapIdx,
+        args: T::Args<'_>,
+    ) -> Result<(T::Handle, T::Reply), Error>
+    where
+        T: Creatable,
+    {
+        let reply =
+            self.invoke_with::<Create<T>>(utcb, CreateRequest { slot, args }, Timeout::NEVER)?;
+        Ok((T::Handle::from(slot), reply))
+    }
+
+    /// Create an object of type `T` that returns data besides its
+    /// capability, using the current UTCB, see
+    /// [`create_returning_with`](Factory::create_returning_with).
+    fn create_returning<T>(
+        &self,
+        slot: CapIdx,
+        args: T::Args<'_>,
+    ) -> Result<(T::Handle, T::Reply), Error>
+    where
+        T: Creatable,
+    {
+        self.create_returning_with::<T>(Utcb::current(), slot, args)
+    }
 }
 
 impl<H: Speaks<Protocol>> Factory for H {}
@@ -105,7 +137,7 @@ impl<H: Speaks<Protocol>> Factory for H {}
 mod tests {
     use super::*;
     use l4_ipc_core::protocol::Uint;
-    use l4_ipc_core::sys::mword;
+    use l4_ipc_core::sys::{mword, umword};
 
     struct Widget;
     impl l4_ipc_core::protocol::Protocol for Widget {
@@ -121,6 +153,25 @@ mod tests {
     }
 
     l4_ipc_core::handle!(Allocator: Protocol);
+
+    struct Gadget;
+    impl l4_ipc_core::protocol::Protocol for Gadget {
+        const PROTO: mword = -98;
+    }
+
+    l4_ipc_core::handle!(GadgetHandle: Gadget);
+
+    impl Creatable for Gadget {
+        type Handle = GadgetHandle;
+        type Args<'a> = Uint;
+        type Reply = (umword,);
+    }
+
+    /// Objects that reply with data are created with create_returning.
+    #[allow(dead_code)]
+    fn returning(allocator: Allocator) -> Result<(GadgetHandle, (umword,)), Error> {
+        allocator.create_returning::<Gadget>(CapIdx::from_index(1), Uint(0))
+    }
 
     /// Creating hands back the handle type the object declares.  The
     /// function is only type-checked, creating needs a kernel.

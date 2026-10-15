@@ -1,7 +1,9 @@
 use core::marker::PhantomData;
 use l4_ipc_core::types::fpage::{Any, CapRights, Fpage, Memory, Obj, Order, SndBase};
 use l4_ipc_core::message::MapItem;
-use l4_ipc_core::protocol::{Marshal, Operation, Protocol, Reader, Unmarshal, Writer};
+use l4_ipc_core::protocol::{
+    Creatable, Flexpage, Marshal, Operation, Protocol, Reader, Unmarshal, Writer,
+};
 use l4_ipc_core::sys::{mword, umword};
 use l4_ipc_core::{CapIdx, Error};
 
@@ -39,6 +41,41 @@ impl UnmapScope {
             UnmapScope::DeleteObj => 0xc000_0000,
         }
     }
+}
+
+/// The memory flexpage for the UTCB area of a new task, the argument of
+/// creating a task.  The factory returns the flexpage it used:
+///
+/// ```no_run
+/// # #[cfg(feature = "proto-factory")]
+/// # fn create() -> Result<(), l4_ipc::Error> {
+/// use l4_ipc::types::fpage::{Fpage, MemRights, Memory, Order};
+/// use l4_ipc::prelude::*;
+/// use l4_ipc::protocol::{self, task::UtcbArea};
+/// use l4_ipc::{kobject, CapIdx};
+///
+/// let factory = kobject::Factory::new(CapIdx::from_index(2));
+/// let area = Fpage::<Memory>::new(0xb000_0000, Order::PAGE, MemRights::RW)?;
+/// let (task, used): (kobject::Task, _) =
+///     factory.create_returning::<protocol::Task>(CapIdx::from_index(0x21), UtcbArea(area))?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct UtcbArea(pub Fpage<Memory>);
+
+impl Marshal for UtcbArea {
+    fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
+        Flexpage(self.0).marshal(w)
+    }
+}
+
+/// A factory creates a task from the flexpage for its UTCB area
+/// (`l4_factory_create_task`) and replies with the flexpage it used.
+impl Creatable for Task {
+    type Handle = crate::kobject::Task;
+    type Args<'a> = UtcbArea;
+    type Reply = Fpage<Any>;
 }
 
 const MAP: umword = 0;
@@ -215,6 +252,32 @@ mod tests {
     #[test]
     fn protocol_value_matches_the_kernel() {
         assert_eq!(Task::PROTO, -11);
+    }
+
+    #[cfg(feature = "proto-factory")]
+    #[test]
+    fn creating_a_task_sends_the_utcb_area_as_a_flexpage_argument() {
+        use crate::protocol::factory::{Create, CreateRequest};
+
+        let utcb = Utcb::zeroed();
+        let area = memory(0xb000_0000, 16);
+        let request = CreateRequest::<Task> {
+            slot: CapIdx::from_index(0x20),
+            args: UtcbArea(area),
+        };
+        let tag = encode_request::<Create<Task>>(&utcb, &request).unwrap();
+
+        // l4_factory_create_task: the type, then the argument with its
+        // header (L4_VARG_TYPE_FPAGE, one word).
+        assert_eq!((tag.label(), tag.words(), tag.items()), (-15, 3, 0));
+        assert_eq!(
+            regs::<3>(&utcb),
+            [
+                -11isize as umword,
+                0x3 | (size_of::<umword>() as umword) << 16,
+                area.bits()
+            ]
+        );
     }
 
     #[test]

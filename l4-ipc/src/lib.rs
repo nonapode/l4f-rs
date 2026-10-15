@@ -78,6 +78,9 @@ pub mod kobject {
     #[cfg(feature = "proto-factory")]
     kobject!(factory, Factory);
 
+    #[cfg(feature = "proto-task")]
+    kobject!(task, Task);
+
     #[cfg(feature = "proto-log")]
     kobject!(vcon, Vcon);
 }
