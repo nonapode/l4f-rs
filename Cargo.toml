@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["l4-bitfield", "l4-sys", "l4-ipc-core", "l4-ipc", "hello-world"]
+members = ["l4-sys", "l4-ipc-core", "l4-ipc", "hello-world"]
 
 [workspace.package]
 version = "0.1.0"

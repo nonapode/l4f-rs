@@ -1,2 +1,2 @@
 pub mod fpage;
-pub use fpage::Fpage;
+pub use fpage::{Fpage, Generic};

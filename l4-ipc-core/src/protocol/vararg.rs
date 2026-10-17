@@ -9,6 +9,7 @@
 use super::{Marshal, Writer};
 use crate::Error;
 use crate::types::Fpage;
+use crate::types::fpage::Kind;
 use core::ffi::CStr;
 use core::fmt;
 use core::mem::size_of;
@@ -89,23 +90,23 @@ impl Marshal for LStr<'_> {
 }
 
 /// A flexpage (`L4_VARG_TYPE_FPAGE`).
-pub struct Flexpage<K>(pub Fpage<K>);
+pub struct Flexpage<K: Kind>(pub Fpage<K>);
 
-impl<K> Clone for Flexpage<K> {
+impl<K: Kind> Clone for Flexpage<K> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<K> Copy for Flexpage<K> {}
+impl<K: Kind> Copy for Flexpage<K> {}
 
-impl<K> fmt::Debug for Flexpage<K> {
+impl<K: Kind> fmt::Debug for Flexpage<K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Flexpage").field(&self.0).finish()
     }
 }
 
-impl<K> Marshal for Flexpage<K> {
+impl<K: Kind> Marshal for Flexpage<K> {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
         w.push(header(FPAGE, size_of::<umword>())?)?;
         self.0.marshal(w)

@@ -1,7 +1,9 @@
+//! The send base of a map item.
+use super::Page;
 use super::flags::flags;
-use super::{Error, Page};
+use super::layout;
+use arbitrary_int::u4;
 use core::fmt;
-use l4_bitfield::{Access, Bitfield, Bits, Decode, Encode, Field, Marker};
 use l4_sys::umword;
 
 /// What happens to the mapping in the sender's space.
@@ -14,17 +16,18 @@ pub enum Transfer {
     Grant = 1,
 }
 
-impl Encode<umword, 1> for Transfer {
-    fn encode(&self) -> Bits<umword, 1> {
-        Bits::new(*self as umword)
+impl Transfer {
+    /// The raw transfer field: a single bit, as a `u8`.
+    pub const fn to_bits(self) -> u8 {
+        self as u8
     }
-}
 
-impl Decode<umword, 1> for Transfer {
-    fn decode(bits: Bits<umword, 1>) -> Self {
-        match bits.into_inner() {
-            0 => Transfer::Map,
-            _ => Transfer::Grant,
+    /// The transfer of the raw field; any non-zero bit means grant.
+    pub const fn from_bits(bits: u8) -> Self {
+        if bits == 0 {
+            Transfer::Map
+        } else {
+            Transfer::Grant
         }
     }
 }
@@ -78,19 +81,27 @@ impl ObjOptions {
 
 /// The four option bits of a [`SndBase`], which mean the cacheability for
 /// memory and [`ObjOptions`] for capabilities.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
-pub struct Options(u8);
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Options(u4);
 
-impl Encode<umword, 4> for Options {
-    fn encode(&self) -> Bits<umword, 4> {
-        Bits::new(self.0 as umword)
+impl Options {
+    /// The raw value of the four bits.
+    pub const fn bits(self) -> u4 {
+        self.0
     }
 }
 
-impl Decode<umword, 4> for Options {
-    fn decode(bits: Bits<umword, 4>) -> Self {
-        Options(bits.into_inner() as u8)
+impl Default for Options {
+    fn default() -> Self {
+        Options(u4::new(0))
     }
+}
+
+/// Why a send base cannot be built.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Error {
+    /// The offset is not a multiple of a page.
+    Misaligned,
 }
 
 /// The send base of a mapping: where in the receive window the mapping is
@@ -105,37 +116,11 @@ impl Decode<umword, 4> for Options {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct SndBase(umword);
 
-/// The transfer field of a send base.
-pub type TransferField = Field<SndBase, Transfer, 1, 2>;
-
-/// The option bits of a send base.
-pub type OptionsField = Field<SndBase, Options, 4, 8>;
-
-/// The offset field of a send base.
-#[cfg(target_pointer_width = "64")]
-pub type OffsetField = Field<SndBase, Page, 12, 64>;
-
-/// The offset field of a send base.
-#[cfg(target_pointer_width = "32")]
-pub type OffsetField = Field<SndBase, Page, 12, 32>;
-
 impl fmt::Debug for SndBase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("SndBase")
             .field(&format_args!("{:#x}", self.0))
             .finish()
-    }
-}
-
-impl Bitfield for SndBase {
-    type Type = umword;
-
-    fn from_raw(value: umword, _: Marker) -> Self {
-        SndBase(value)
-    }
-
-    fn raw(&self, _: Marker) -> &umword {
-        &self.0
     }
 }
 
@@ -156,50 +141,61 @@ impl SndBase {
         if offset & ((1 << Page::SHIFT) - 1) != 0 {
             return Err(Error::Misaligned);
         }
-        let mut base = SndBase(0);
-        base.set::<OffsetField>(&Page::new(offset >> Page::SHIFT));
-        Ok(base)
+        let page = Page::new(offset >> Page::SHIFT);
+        Ok(SndBase(layout::insert::<12, { Page::BITS }>(
+            0,
+            page.payload().value() as umword,
+        )))
     }
 
     /// The offset into the receive window.
     pub fn offset(self) -> umword {
-        self.get::<OffsetField>().get() << Page::SHIFT
+        self.page().get() << Page::SHIFT
     }
 
     /// Whether the mapping is moved or copied.
     pub fn transfer(self) -> Transfer {
-        self.get::<TransferField>()
+        Transfer::from_bits(layout::extract_word::<1, 1>(self.0).value() as u8)
     }
 
+    /// The same send base with the mapping moved or copied.
     #[must_use]
     pub fn with_transfer(mut self, transfer: Transfer) -> SndBase {
-        self.set::<TransferField>(&transfer);
+        self.0 = layout::insert::<1, 1>(self.0, transfer.to_bits() as umword);
         self
     }
 
     /// The options as the cacheability of a memory mapping; `None` if the
     /// bits are not one.
     pub fn cacheability(self) -> Option<Cacheability> {
-        Cacheability::from_bits(self.get::<OptionsField>().0)
+        Cacheability::from_bits(self.options_bits().value())
     }
 
     /// The same send base for a memory mapping with the cacheability.
     #[must_use]
     pub fn with_cacheability(mut self, cacheability: Cacheability) -> SndBase {
-        self.set::<OptionsField>(&Options(cacheability as u8));
+        self.0 = layout::insert::<4, 4>(self.0, cacheability as umword);
         self
     }
 
     /// The options as those of a mapping of capabilities.
     pub fn obj_options(self) -> ObjOptions {
-        ObjOptions::from_bits(self.get::<OptionsField>().0).unwrap_or_default()
+        ObjOptions::from_bits(self.options_bits())
     }
 
     /// The same send base for a mapping of capabilities with the options.
     #[must_use]
     pub fn with_obj_options(mut self, options: ObjOptions) -> SndBase {
-        self.set::<OptionsField>(&Options(options.bits()));
+        self.0 = layout::insert::<4, 4>(self.0, options.bits().value() as umword);
         self
+    }
+
+    fn page(self) -> Page {
+        Page::from_payload(layout::extract_payload(self.0))
+    }
+
+    fn options_bits(self) -> u4 {
+        u4::new(layout::extract_word::<4, 4>(self.0).value() as u8)
     }
 }
 

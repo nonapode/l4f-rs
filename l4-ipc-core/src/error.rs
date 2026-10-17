@@ -1,3 +1,4 @@
+use crate::types::fpage;
 use l4_sys::{mword, umword};
 
 /// Errors of IPC based operations.
@@ -16,29 +17,44 @@ pub enum Error {
     /// An untyped word was added after a typed item.  The untyped words of
     /// a message come first.
     Misordered,
-    /// A flexpage could not be built.
-    Fpage(crate::types::fpage::Error),
+    /// A flexpage could not be built or decoded.
+    Fpage(fpage::Error),
 }
 
-impl From<crate::types::fpage::Error> for Error {
-    fn from(error: crate::types::fpage::Error) -> Self {
+impl From<fpage::Error> for Error {
+    fn from(error: fpage::Error) -> Self {
         Error::Fpage(error)
     }
 }
 
+macro_rules! from_kind_error {
+    ($($kind:ident),+ $(,)?) => {$(
+        impl From<fpage::$kind::Error> for Error {
+            fn from(error: fpage::$kind::Error) -> Self {
+                Error::Fpage(error.into())
+            }
+        }
+    )+};
+}
+
+from_kind_error!(memory, io, object, special, snd_base);
+
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
+    use crate::types::fpage::memory;
 
     fn build() -> Result<(), Error> {
-        Err(crate::types::fpage::Error::Misaligned)?
+        Err(memory::Error::Misaligned)?
     }
 
     #[test]
     fn flexpage_errors_convert_with_the_question_mark() {
         assert_eq!(
             build(),
-            Err(Error::Fpage(crate::types::fpage::Error::Misaligned))
+            Err(Error::Fpage(fpage::Error::Memory(
+                memory::Error::Misaligned
+            )))
         );
     }
 }

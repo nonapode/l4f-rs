@@ -1,11 +1,12 @@
-use l4_bitfield::{Bits, Decode, Encode};
+//! The type field and the page field of a flexpage.
+use super::layout::{PayloadType, TypeType};
+use arbitrary_int::u2;
 use l4_sys::umword;
 
 /// The kind of a flexpage, the two bit type field.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Type {
-    /// The special flexpages, see [`Fpage::invalid`](super::Fpage::invalid)
-    /// and [`Fpage::all`](super::Fpage::all).
+    /// The special flexpages, see [`Special`](super::Special).
     Special = 0,
     /// A range of memory (`L4_FPAGE_MEMORY`).
     Memory = 1,
@@ -15,16 +16,20 @@ pub enum Type {
     Obj = 3,
 }
 
-impl Encode<umword, 2> for Type {
-    fn encode(&self) -> Bits<umword, 2> {
-        Bits::new(*self as umword)
+impl Type {
+    /// The raw type field.
+    pub const fn to_bits(self) -> TypeType {
+        match self {
+            Type::Special => u2::new(0),
+            Type::Memory => u2::new(1),
+            Type::Io => u2::new(2),
+            Type::Obj => u2::new(3),
+        }
     }
-}
 
-impl Decode<umword, 2> for Type {
-    fn decode(bits: Bits<umword, 2>) -> Self {
-        // All four values of the field are valid.
-        match bits.into_inner() {
+    /// The kind of the raw type field; all four values are valid.
+    pub const fn from_bits(bits: TypeType) -> Self {
+        match bits.value() {
             0 => Type::Special,
             1 => Type::Memory,
             2 => Type::Io,
@@ -39,7 +44,7 @@ impl Decode<umword, 2> for Type {
 /// is the address divided by the page size, for capabilities the index of
 /// the capability slot and for I/O ports the port number.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
-pub struct Page(umword);
+pub struct Page(PayloadType);
 
 impl Page {
     /// The position of the page field within a flexpage
@@ -49,30 +54,37 @@ impl Page {
     /// The width of the page field (`L4_FPAGE_ADDR_BITS`).
     pub const BITS: usize = umword::BITS as usize - Self::SHIFT;
 
-    pub const fn new(page: umword) -> Page {
-        Page(page)
+    /// The page number `page`; panics if it does not fit into the page
+    /// field.
+    pub fn new(page: umword) -> Page {
+        #[cfg(target_pointer_width = "64")]
+        let value = PayloadType::new(page as u64);
+        #[cfg(target_pointer_width = "32")]
+        let value = PayloadType::new(page as u32);
+        Page(value)
     }
 
+    /// The page number: the address, port or slot index divided by the
+    /// page size.
     pub const fn get(self) -> umword {
+        self.0.value() as umword
+    }
+
+    /// The page of the raw page field.
+    pub(crate) const fn from_payload(payload: PayloadType) -> Page {
+        Page(payload)
+    }
+
+    /// The raw page field.
+    pub(crate) const fn payload(self) -> PayloadType {
         self.0
-    }
-}
-
-impl<const N: usize> Encode<umword, N> for Page {
-    fn encode(&self) -> Bits<umword, N> {
-        Bits::new(self.0)
-    }
-}
-
-impl<const N: usize> Decode<umword, N> for Page {
-    fn decode(bits: Bits<umword, N>) -> Self {
-        Page(bits.into_inner())
     }
 }
 
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
+    use arbitrary_int::u2;
 
     #[test]
     fn type_values_match_the_abi() {
@@ -83,14 +95,17 @@ mod tests {
     }
 
     #[test]
-    fn type_codec_round_trips() {
+    fn type_bits_round_trip() {
         for ty in [Type::Special, Type::Memory, Type::Io, Type::Obj] {
-            assert_eq!(Type::decode(ty.encode()), ty);
+            assert_eq!(Type::from_bits(ty.to_bits()), ty);
         }
+        assert_eq!(Type::from_bits(u2::new(0)), Type::Special);
+        assert_eq!(Type::from_bits(u2::new(3)), Type::Obj);
     }
 
     #[test]
     fn page_field_is_the_rest_of_the_word() {
         assert_eq!(Page::SHIFT + Page::BITS, umword::BITS as usize);
+        assert_eq!(Page::new(0x1000).get(), 0x1000);
     }
 }

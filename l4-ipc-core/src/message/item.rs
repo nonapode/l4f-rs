@@ -1,6 +1,6 @@
 use crate::Error;
 use crate::protocol::{Marshal, Writer};
-use crate::types::fpage::{Fpage, SndBase};
+use crate::types::fpage::{Fpage, Kind, SndBase};
 use l4_sys::umword;
 
 /// `L4_ITEM_MAP`: the item is a map item.
@@ -10,22 +10,22 @@ pub(crate) const ITEM_MAP: umword = 8;
 /// of the receiver, or grants it, at the send base.
 ///
 /// A map item is a typed item and follows the untyped words of a message.
-pub struct MapItem<K> {
+pub struct MapItem<K: Kind> {
     /// Where the mapping is placed, and how.
     pub base: SndBase,
     /// What is mapped.
     pub fpage: Fpage<K>,
 }
 
-impl<K> Clone for MapItem<K> {
+impl<K: Kind> Clone for MapItem<K> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<K> Copy for MapItem<K> {}
+impl<K: Kind> Copy for MapItem<K> {}
 
-impl<K> MapItem<K> {
+impl<K: Kind> MapItem<K> {
     pub const fn new(fpage: Fpage<K>, base: SndBase) -> MapItem<K> {
         MapItem { base, fpage }
     }
@@ -37,7 +37,7 @@ impl<K> MapItem<K> {
     }
 }
 
-impl<K> Marshal for MapItem<K> {
+impl<K: Kind> Marshal for MapItem<K> {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
         w.push_item(self.control(), self.fpage.bits())
     }
@@ -47,11 +47,11 @@ impl<K> Marshal for MapItem<K> {
 mod tests {
     use super::*;
     use crate::CapIdx;
-    use crate::types::fpage::{CapRights, Obj, Order, Transfer};
+    use crate::types::fpage::{CapRights, Object, Order, Transfer};
     use l4_sys::Utcb;
 
-    fn slot_2() -> Fpage<Obj> {
-        Fpage::<Obj>::new(
+    fn slot_2() -> Fpage<Object> {
+        Fpage::<Object>::new(
             CapIdx::from_index(2),
             Order::new(0).unwrap(),
             CapRights::RWS,

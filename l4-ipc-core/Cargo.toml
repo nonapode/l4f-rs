@@ -6,7 +6,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-l4-bitfield = { path = "../l4-bitfield" }
+arbitrary-int = "2.2"
 l4-sys = { path = "../l4-sys" }
 
 [features]

@@ -1,7 +1,7 @@
 /// Defines a set of flags that fits into four bits, e.g. the rights field of a
-/// flexpage.  The meaning of the bits depends on the kind of flexpage, which is
-/// why every kind has a type of its own: the write bit of a memory flexpage is
-/// not the write bit of an object flexpage.
+/// flexpage.  The meaning of the bits depends on the kind of flexpage, which
+/// is why every kind has a type of its own: the write bit of a memory flexpage
+/// is not the write bit of an object flexpage.
 macro_rules! flags {
     (
         $(#[$meta:meta])*
@@ -10,38 +10,41 @@ macro_rules! flags {
         }
     ) => {
         $(#[$meta])*
-        #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
-        pub struct $name(u8);
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        pub struct $name(arbitrary_int::u4);
 
         impl $name {
             /// No flags.
-            pub const NONE: $name = $name(0);
+            pub const NONE: $name = $name(arbitrary_int::u4::new(0));
 
-            $($(#[$cmeta])* pub const $konst: $name = $name($value);)+
+            $($(#[$cmeta])* pub const $konst: $name = $name(arbitrary_int::u4::new($value));)+
 
             /// The raw value of the four bits.
-            pub const fn bits(self) -> u8 {
+            pub const fn bits(self) -> arbitrary_int::u4 {
                 self.0
             }
 
-            /// The flags for the raw value of the field; `None` if it does
-            /// not fit into the four bits.
-            pub const fn from_bits(bits: u8) -> Option<$name> {
-                if bits <= 0xf {
-                    Some($name(bits))
-                } else {
-                    None
-                }
+            /// The flags of the raw field; every four bit value is valid and
+            /// kept, so that a flexpage survives being decoded and encoded
+            /// again.
+            pub const fn from_bits(bits: arbitrary_int::u4) -> $name {
+                $name(bits)
             }
 
             /// The flags of both sets.
             pub const fn union(self, other: $name) -> $name {
-                $name(self.0 | other.0)
+                $name(arbitrary_int::u4::new(self.0.value() | other.0.value()))
             }
 
             /// Whether all flags of `other` are included.
             pub const fn contains(self, other: $name) -> bool {
-                self.0 & other.0 == other.0
+                self.0.value() & other.0.value() == other.0.value()
+            }
+        }
+
+        impl ::core::default::Default for $name {
+            fn default() -> Self {
+                Self::NONE
             }
         }
 
@@ -62,16 +65,17 @@ macro_rules! flags {
         impl ::core::fmt::Debug for $name {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 let mut separator = "";
+                let bits = self.0.value();
 
                 f.write_str(concat!(stringify!($name), "("))?;
                 $(
-                    if self.0 & $value != 0 {
+                    if bits & $value != 0 {
                         f.write_str(separator)?;
                         f.write_str(stringify!($konst))?;
                         separator = "|";
                     }
                 )+
-                let unknown = self.0 & !(0 $(| $value)+);
+                let unknown = bits & !(0 $(| $value)+);
                 if unknown != 0 {
                     write!(f, "{separator}{unknown:#x}")?;
                     separator = "|";
@@ -80,20 +84,6 @@ macro_rules! flags {
                     f.write_str("NONE")?;
                 }
                 f.write_str(")")
-            }
-        }
-
-        impl ::l4_bitfield::Encode<::l4_sys::umword, 4> for $name {
-            fn encode(&self) -> ::l4_bitfield::Bits<::l4_sys::umword, 4> {
-                ::l4_bitfield::Bits::new(self.0 as ::l4_sys::umword)
-            }
-        }
-
-        impl ::l4_bitfield::Decode<::l4_sys::umword, 4> for $name {
-            /// Keeps bits that have no name, so that a flexpage survives
-            /// being decoded and encoded again.
-            fn decode(bits: ::l4_bitfield::Bits<::l4_sys::umword, 4>) -> Self {
-                $name(bits.into_inner() as u8)
             }
         }
     };

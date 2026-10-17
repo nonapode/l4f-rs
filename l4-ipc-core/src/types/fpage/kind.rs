@@ -1,76 +1,45 @@
-use super::{CapRights, MemRights, Type};
-use l4_bitfield::{Bits, Decode, Encode};
+//! The common interface of the flexpage kinds.
+use super::Type;
+use super::layout::{OrderType, PayloadType, RightsType, TypeType};
+use core::fmt::Debug;
+use core::hash::Hash;
 use l4_sys::umword;
 
 mod sealed {
     pub trait Sealed {}
 }
 
-/// A kind of flexpage.  The kind fixes the value of the type field and what
-/// the rights of the flexpage are.
-pub trait Kind: sealed::Sealed {
+/// A kind of flexpage.  The kind fixes the value of the type field, the
+/// meaning of the rights field and what the page field holds.
+pub trait Kind: sealed::Sealed + Copy + PartialEq + Eq + Hash + Debug {
     /// The value of the type field.
     const TYPE: Type;
 
-    /// The rights of a flexpage of this kind.
-    type Rights: Copy + Encode<umword, 4> + Decode<umword, 4>;
+    /// Why a flexpage of this kind cannot be built or decoded.
+    type Error;
+
+    /// The word of the flexpage, as the kernel expects it.
+    fn bits(&self) -> umword;
+
+    /// The raw rights field.
+    fn rights_bits(&self) -> RightsType;
+
+    /// The raw order field.
+    fn order_bits(&self) -> OrderType;
+
+    /// The raw page field.
+    fn payload_bits(&self) -> PayloadType;
+
+    /// The flexpage of the raw fields, if they describe one of this kind.
+    fn decode(
+        rights: RightsType,
+        r#type: TypeType,
+        order: OrderType,
+        payload: PayloadType,
+    ) -> Result<Self, Self::Error>;
 }
 
-/// The marker of the special flexpages: the invalid one and the one that
-/// covers everything.
-pub enum Special {}
-
-/// The marker of flexpages for memory.
-pub enum Memory {}
-
-/// The marker of flexpages for I/O ports.
-pub enum Io {}
-
-/// The marker of flexpages for capabilities.
-pub enum Obj {}
-
-/// The marker of a flexpage of any kind, e.g. one that has just been
-/// received.  See [`Fpage::resolve`](super::Fpage::resolve).
-pub enum Any {}
-
-/// The rights of the special flexpages: none.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
-pub struct NoRights;
-
-impl Encode<umword, 4> for NoRights {
-    fn encode(&self) -> Bits<umword, 4> {
-        Bits::new(0)
-    }
-}
-
-impl Decode<umword, 4> for NoRights {
-    fn decode(_: Bits<umword, 4>) -> Self {
-        NoRights
-    }
-}
-
-impl sealed::Sealed for Special {}
-impl sealed::Sealed for Memory {}
-impl sealed::Sealed for Io {}
-impl sealed::Sealed for Obj {}
-
-impl Kind for Special {
-    const TYPE: Type = Type::Special;
-    type Rights = NoRights;
-}
-
-impl Kind for Memory {
-    const TYPE: Type = Type::Memory;
-    type Rights = MemRights;
-}
-
-/// The rights of an I/O flexpage are always read-write.
-impl Kind for Io {
-    const TYPE: Type = Type::Io;
-    type Rights = MemRights;
-}
-
-impl Kind for Obj {
-    const TYPE: Type = Type::Obj;
-    type Rights = CapRights;
-}
+impl sealed::Sealed for super::Special {}
+impl sealed::Sealed for super::Memory {}
+impl sealed::Sealed for super::Io {}
+impl sealed::Sealed for super::Object {}

@@ -1,18 +1,19 @@
-use super::{Any, Fpage};
+//! The wire format of flexpages.
+use super::{Fpage, Generic, Kind};
 use crate::Error;
 use crate::protocol::{Marshal, Reader, Unmarshal, Writer};
 
 /// A flexpage is sent as the one word it is.
-impl<K> Marshal for Fpage<K> {
+impl<K: Kind> Marshal for Fpage<K> {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
         w.push(self.bits())
     }
 }
 
-/// A flexpage that is received has no kind yet, see [`Fpage::resolve`].
-impl Unmarshal for Fpage<Any> {
+/// A flexpage that is received has no kind yet, see [`Generic`].
+impl Unmarshal for Generic {
     fn unmarshal(r: &mut Reader<'_>) -> Result<Self, Error> {
-        r.pop().map(Fpage::from_bits)
+        r.pop().map(Generic::from_bits)
     }
 }
 
@@ -34,8 +35,8 @@ mod tests {
         assert_eq!(utcb.mr(0), page.bits());
 
         let tag = Tag::new(0, 1, 0, TagFlags::NONE);
-        let received = Fpage::<Any>::unmarshal(&mut Reader::new(&utcb, tag)).unwrap();
-        assert_eq!(received, page.into_any());
+        let received = Generic::unmarshal(&mut Reader::new(&utcb, tag)).unwrap();
+        assert_eq!(received, Generic::from(page));
     }
 
     #[test]
@@ -44,7 +45,7 @@ mod tests {
         let tag = Tag::new(0, 0, 0, TagFlags::NONE);
 
         assert_eq!(
-            Fpage::<Any>::unmarshal(&mut Reader::new(&utcb, tag)),
+            Generic::unmarshal(&mut Reader::new(&utcb, tag)),
             Err(Error::Truncated)
         );
     }
