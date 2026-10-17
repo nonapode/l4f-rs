@@ -1,4 +1,4 @@
-use l4_ipc_core::types::fpage::{Any, CapRights, Fpage, Memory, Obj, Order, SndBase};
+use l4_ipc_core::types::fpage::{CapRights, Fpage, Generic, Kind, Memory, Object, Order, SndBase};
 use l4_ipc_core::protocol::Speaks;
 use l4_ipc_core::sys::Utcb;
 use l4_ipc_core::{CapIdx, Error, Timeout};
@@ -48,7 +48,7 @@ use crate::protocol::task::{
 pub trait Task: Speaks<Protocol> {
     /// Map or grant `fpage` of the task `src` into this task, at `base`
     /// (`l4_task_map`).
-    fn map_with<K, S>(
+    fn map_with<K: Kind, S>(
         &self,
         utcb: &Utcb,
         src: &S,
@@ -67,7 +67,7 @@ pub trait Task: Speaks<Protocol> {
     }
 
     /// See [`map_with`](Task::map_with).
-    fn map<K, S>(&self, src: &S, fpage: Fpage<K>, base: SndBase) -> Result<(), Error>
+    fn map<K: Kind, S>(&self, src: &S, fpage: Fpage<K>, base: SndBase) -> Result<(), Error>
     where
         S: Speaks<Protocol>,
     {
@@ -76,7 +76,7 @@ pub trait Task: Speaks<Protocol> {
 
     /// Revoke the flexpages from this task and the tasks it mapped them to
     /// (`l4_task_unmap`).  They have to fit into the message registers.
-    fn unmap_with<K: 'static>(
+    fn unmap_with<K: Kind + 'static>(
         &self,
         utcb: &Utcb,
         fpages: &[Fpage<K>],
@@ -86,7 +86,7 @@ pub trait Task: Speaks<Protocol> {
     }
 
     /// See [`unmap_with`](Task::unmap_with).
-    fn unmap<K: 'static>(&self, fpages: &[Fpage<K>], scope: UnmapScope) -> Result<(), Error> {
+    fn unmap<K: Kind + 'static>(&self, fpages: &[Fpage<K>], scope: UnmapScope) -> Result<(), Error> {
         self.unmap_with(Utcb::current(), fpages, scope)
     }
 
@@ -115,19 +115,19 @@ pub trait Task: Speaks<Protocol> {
 
     /// Add kernel-user memory to the task and return the flexpage the
     /// kernel used (`l4_task_add_ku_mem`).
-    fn add_ku_mem_with(&self, utcb: &Utcb, fpage: Fpage<Memory>) -> Result<Fpage<Any>, Error> {
+    fn add_ku_mem_with(&self, utcb: &Utcb, fpage: Fpage<Memory>) -> Result<Generic, Error> {
         self.invoke_with::<AddKuMem>(utcb, fpage, Timeout::NEVER)
     }
 
     /// See [`add_ku_mem_with`](Task::add_ku_mem_with).
-    fn add_ku_mem(&self, fpage: Fpage<Memory>) -> Result<Fpage<Any>, Error> {
+    fn add_ku_mem(&self, fpage: Fpage<Memory>) -> Result<Generic, Error> {
         self.add_ku_mem_with(Utcb::current(), fpage)
     }
 
     /// Delete the object the capability refers to, and unmap the capability
     /// from all spaces (`l4_task_delete_obj`).  Needs the delete right.
     fn delete_obj_with(&self, utcb: &Utcb, obj: CapIdx) -> Result<(), Error> {
-        let fpage = Fpage::<Obj>::new(obj, Order::ZERO, CapRights::RWSD)?;
+        let fpage = Fpage::<Object>::new(obj, Order::ZERO, CapRights::RWSD)?;
         self.unmap_with(utcb, &[fpage], UnmapScope::DeleteObj)
     }
 
@@ -139,7 +139,7 @@ pub trait Task: Speaks<Protocol> {
     /// Unmap the capability from all spaces, without deleting the object
     /// (`l4_task_release_cap`).
     fn release_cap_with(&self, utcb: &Utcb, cap: CapIdx) -> Result<(), Error> {
-        let fpage = Fpage::<Obj>::new(cap, Order::ZERO, CapRights::RWSD)?;
+        let fpage = Fpage::<Object>::new(cap, Order::ZERO, CapRights::RWSD)?;
         self.unmap_with(utcb, &[fpage], UnmapScope::AllSpaces)
     }
 
@@ -165,7 +165,7 @@ mod tests {
         task.unmap(&[page], UnmapScope::OtherSpaces)?;
         let _: bool = task.cap_valid(CapIdx::from_index(1))?;
         let _: bool = task.cap_equal(CapIdx::from_index(1), CapIdx::from_index(2))?;
-        let _: Fpage<Any> = task.add_ku_mem(page)?;
+        let _: Generic = task.add_ku_mem(page)?;
         task.delete_obj(CapIdx::from_index(3))?;
         task.release_cap(CapIdx::from_index(3))
     }

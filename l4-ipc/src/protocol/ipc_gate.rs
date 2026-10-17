@@ -3,7 +3,7 @@ use super::thread::Thread;
 use l4_ipc_core::message::MapItem;
 use l4_ipc_core::protocol::{Creatable, Marshal, Operation, Protocol, Speaks, Uint, Writer};
 use l4_ipc_core::sys::{mword, umword};
-use l4_ipc_core::types::fpage::{CapRights, Fpage, Obj, Order, SndBase};
+use l4_ipc_core::types::fpage::{CapRights, Fpage, Object, Order, SndBase};
 use l4_ipc_core::{CapIdx, Error};
 
 /// The IPC gate protocol marker, which is `L4_PROTO_KOBJECT`.
@@ -99,7 +99,7 @@ impl Marshal for GateTarget {
         Uint(self.label.get()).marshal(w)?;
 
         if let Some(thread) = self.thread {
-            let thread = Fpage::<Obj>::new(thread, Order::ZERO, CapRights::RWS)?;
+            let thread = Fpage::<Object>::new(thread, Order::ZERO, CapRights::RWS)?;
             MapItem::new(thread, SndBase::default()).marshal(w)?;
         }
         Ok(())
@@ -195,7 +195,9 @@ mod tests {
 
         assert_eq!(
             target.marshal(&mut Writer::new(&utcb)),
-            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::InvalidCap))
+            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::Object(
+                l4_ipc_core::types::fpage::object::Error::InvalidCap
+            )))
         );
     }
 

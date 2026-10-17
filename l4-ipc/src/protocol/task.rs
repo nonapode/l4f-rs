@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use l4_ipc_core::types::fpage::{Any, CapRights, Fpage, Memory, Obj, Order, SndBase};
+use l4_ipc_core::types::fpage::{CapRights, Fpage, Generic, Kind, Memory, Object, Order, SndBase};
 use l4_ipc_core::message::MapItem;
 use l4_ipc_core::protocol::{
     Creatable, Flexpage, Marshal, Operation, Protocol, Reader, Unmarshal, Writer,
@@ -75,7 +75,7 @@ impl Marshal for UtcbArea {
 impl Creatable for Task {
     type Handle = crate::kobject::Task;
     type Args<'a> = UtcbArea;
-    type Reply = Fpage<Any>;
+    type Reply = Generic;
 }
 
 const MAP: umword = 0;
@@ -93,7 +93,7 @@ const ADD_KU_MEM: umword = 3;
 pub struct Map<K>(PhantomData<fn() -> K>);
 
 /// The request of [`Map`].
-pub struct MapRequest<K> {
+pub struct MapRequest<K: Kind> {
     /// The task whose flexpage is mapped.
     pub src: CapIdx,
     /// The flexpage in the space of `src`.
@@ -102,9 +102,9 @@ pub struct MapRequest<K> {
     pub base: SndBase,
 }
 
-impl<K> Marshal for MapRequest<K> {
+impl<K: Kind> Marshal for MapRequest<K> {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
-        let src = Fpage::<Obj>::new(self.src, Order::ZERO, CapRights::RWS)?;
+        let src = Fpage::<Object>::new(self.src, Order::ZERO, CapRights::RWS)?;
 
         w.push(self.base.bits())?;
         w.push(self.fpage.bits())?;
@@ -112,7 +112,7 @@ impl<K> Marshal for MapRequest<K> {
     }
 }
 
-impl<K> Operation for Map<K> {
+impl<K: Kind> Operation for Map<K> {
     type Proto = Task;
     const OPCODE: Option<umword> = Some(MAP);
     type Request<'a> = MapRequest<K>;
@@ -124,14 +124,14 @@ impl<K> Operation for Map<K> {
 pub struct Unmap<K>(PhantomData<fn() -> K>);
 
 /// The request of [`Unmap`].
-pub struct UnmapRequest<'a, K> {
+pub struct UnmapRequest<'a, K: Kind> {
     /// What is removed.
     pub scope: UnmapScope,
     /// The flexpages to unmap; as many as fit into the message registers.
     pub fpages: &'a [Fpage<K>],
 }
 
-impl<K> Marshal for UnmapRequest<'_, K> {
+impl<K: Kind> Marshal for UnmapRequest<'_, K> {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
         w.push(self.scope.bits())?;
         self.fpages
@@ -142,7 +142,7 @@ impl<K> Marshal for UnmapRequest<'_, K> {
 
 /// The kinds of flexpages are all `'static`; the bound lets the request borrow
 /// a slice of flexpages.
-impl<K: 'static> Operation for Unmap<K> {
+impl<K: Kind + 'static> Operation for Unmap<K> {
     type Proto = Task;
     const OPCODE: Option<umword> = Some(UNMAP);
     type Request<'a> = UnmapRequest<'a, K>;
@@ -229,7 +229,7 @@ impl Operation for AddKuMem {
     type Proto = Task;
     const OPCODE: Option<umword> = Some(ADD_KU_MEM);
     type Request<'a> = Fpage<Memory>;
-    type Reply = Fpage<Any>;
+    type Reply = Generic;
 }
 
 #[cfg(all(test, not(target_os = "none")))]
@@ -322,7 +322,9 @@ mod tests {
 
         assert_eq!(
             encode_request::<Map<Memory>>(&utcb, &request),
-            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::InvalidCap))
+            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::Object(
+                l4_ipc_core::types::fpage::object::Error::InvalidCap
+            )))
         );
     }
 
@@ -393,9 +395,9 @@ mod tests {
         utcb.set_mr(0, 0x10316);
 
         let tag = Tag::new(0, 1, 0, TagFlags::NONE);
-        let used = Fpage::<Any>::unmarshal(&mut Reader::new(&utcb, tag)).unwrap();
+        let used = Generic::unmarshal(&mut Reader::new(&utcb, tag)).unwrap();
 
         assert_eq!(used.bits(), 0x10316);
-        assert_eq!(size_of::<Fpage<Any>>(), size_of::<umword>());
+        assert_eq!(size_of::<Generic>(), size_of::<umword>());
     }
 }

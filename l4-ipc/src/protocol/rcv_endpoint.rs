@@ -1,7 +1,7 @@
 use l4_ipc_core::message::MapItem;
 use l4_ipc_core::protocol::{Marshal, Operation, Protocol, Reader, Unmarshal, Writer};
 use l4_ipc_core::sys::{mword, umword};
-use l4_ipc_core::types::fpage::{CapRights, Fpage, Obj, Order, SndBase};
+use l4_ipc_core::types::fpage::{CapRights, Fpage, Object, Order, SndBase};
 use l4_ipc_core::{CapIdx, Error, Label};
 
 /// The receive endpoint protocol marker, which is `L4_PROTO_KOBJECT`.
@@ -85,7 +85,7 @@ pub struct BindRequest {
 
 impl Marshal for BindRequest {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
-        let thread = Fpage::<Obj>::new(self.thread, Order::ZERO, CapRights::RWS)?;
+        let thread = Fpage::<Object>::new(self.thread, Order::ZERO, CapRights::RWS)?;
 
         self.label.marshal(w)?;
         MapItem::new(thread, SndBase::default()).marshal(w)
@@ -164,7 +164,9 @@ mod tests {
 
         assert_eq!(
             encode_request::<Bind>(&utcb, &request),
-            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::InvalidCap))
+            Err(Error::Fpage(l4_ipc_core::types::fpage::Error::Object(
+                l4_ipc_core::types::fpage::object::Error::InvalidCap
+            )))
         );
     }
 
