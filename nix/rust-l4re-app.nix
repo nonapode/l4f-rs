@@ -18,7 +18,6 @@ rustPlatform.buildRustPackage {
       ../Cargo.toml
       ../Cargo.lock
       (../. + "/${package}")
-      ../l4-bitfield
       ../l4-ipc
       ../l4-ipc-core
       ../l4-sys

@@ -39,7 +39,6 @@
           # The toolchain from rust-toolchain.toml with the given bare-metal targets.
           rustFor = rustTargets:
             (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml).override {
-              extensions = [ "rust-src" ];
               targets = rustTargets;
             };
 
