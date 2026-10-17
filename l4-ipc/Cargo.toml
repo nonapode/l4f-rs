@@ -24,6 +24,8 @@ proto-factory = []
 proto-task = []
 proto-kobject = []
 proto-thread = []
+# Binds to a thread, so the thread protocol is needed.
+proto-rcv_endpoint = ["proto-thread"]
 
 # aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
 cpu-virt = ["l4-ipc-core/cpu-virt"]

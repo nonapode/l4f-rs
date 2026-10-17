@@ -17,7 +17,7 @@ macro_rules! for_each_protocol {
     };
 
     ($macro:ident ! ( $($prefix:expr, )* ? $(, $suffix:expr)* )) => {
-        for_each_protocol!(Log, Factory, Task, Kobject, Thread => $macro ! ( $($prefix ,)* ? $(, $suffix)*));
+        for_each_protocol!(Log, Factory, Task, Kobject, Thread, RcvEndpoint => $macro ! ( $($prefix ,)* ? $(, $suffix)*));
     };
 
     ($current:ident $(, $next:ident)* => $macro:ident ! ( $($prefix:expr ,)* ? $(, $suffix:expr)* )) => {
