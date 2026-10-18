@@ -3,7 +3,7 @@ use l4_ipc_core::handle;
 
 handle!(
     /// A thread, the kernel object that executes code.  It speaks the thread
-    /// protocol, which has no operations yet.
+    /// protocol: its control, register exchange and vCPU operations.
     pub Thread: protocol::Thread
 );
 
