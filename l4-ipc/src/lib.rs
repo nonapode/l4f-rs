@@ -17,7 +17,7 @@ macro_rules! for_each_protocol {
     };
 
     ($macro:ident ! ( $($prefix:expr, )* ? $(, $suffix:expr)* )) => {
-        for_each_protocol!(Log, Factory, Task, Kobject, Thread, RcvEndpoint, IpcGate, ThreadGroup => $macro ! ( $($prefix ,)* ? $(, $suffix)*));
+        for_each_protocol!(Log, Factory, Task, Kobject, Thread, RcvEndpoint, IpcGate, ThreadGroup, Scheduler => $macro ! ( $($prefix ,)* ? $(, $suffix)*));
     };
 
     ($current:ident $(, $next:ident)* => $macro:ident ! ( $($prefix:expr ,)* ? $(, $suffix:expr)* )) => {
@@ -89,6 +89,9 @@ pub mod kobject {
 
     #[cfg(feature = "proto-thread_group")]
     kobject!(thread_group, ThreadGroup);
+
+    #[cfg(feature = "proto-scheduler")]
+    kobject!(scheduler, Scheduler);
 
     #[cfg(feature = "proto-log")]
     kobject!(vcon, Vcon);

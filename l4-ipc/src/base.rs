@@ -1,6 +1,6 @@
 //! The well-known capabilities of the initial environment.
 
-use super::kobject::{Factory, Task, Thread, Vcon};
+use super::kobject::{Factory, Scheduler, Task, Thread, Vcon};
 use l4_ipc_core::CapIdx;
 
 pub struct Index;
@@ -26,6 +26,8 @@ pub const LOG: Vcon = Vcon::new(Index::LOG);
 
 pub const FACTORY: Factory = Factory::new(Index::FACTORY);
 
+pub const SCHEDULER: Scheduler = Scheduler::new(Index::SCHEDULER);
+
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
     use super::*;
@@ -44,5 +46,10 @@ mod tests {
     #[test]
     fn the_task_capability_is_at_its_well_known_slot() {
         assert_eq!(TASK.idx(), CapIdx::from_index(1));
+    }
+
+    #[test]
+    fn the_scheduler_capability_is_at_its_well_known_slot() {
+        assert_eq!(SCHEDULER.idx(), CapIdx::from_index(7));
     }
 }
