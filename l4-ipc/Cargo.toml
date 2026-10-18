@@ -13,10 +13,10 @@ pastey = "0.2.3"
 default = ["base"]
 
 # Protocol sets.  `base` selects the protocols every L4 system provides;
-# it currently contains `log`, `factory`, `task`, `kobject`, `thread` and
-# `ipc_gate`, further protocols (sigma0, scheduler, irq, irq_sender) join it
-# as they are implemented.
-base = ["proto-log", "proto-factory", "proto-task", "proto-kobject", "proto-thread", "proto-ipc_gate"]
+# it currently contains `log`, `factory`, `task`, `kobject`, `thread`,
+# `ipc_gate` and `thread_group`, further protocols (sigma0, scheduler, irq,
+# irq_sender) join it as they are implemented.
+base = ["proto-log", "proto-factory", "proto-task", "proto-kobject", "proto-thread", "proto-ipc_gate", "proto-thread_group"]
 
 # Individual protocols.
 proto-log = []
@@ -28,6 +28,8 @@ proto-thread = []
 proto-rcv_endpoint = ["proto-thread"]
 # A gate is a kobject and a receive endpoint.
 proto-ipc_gate = ["proto-kobject", "proto-rcv_endpoint"]
+# Adds and removes threads, so the thread protocol is needed.
+proto-thread_group = ["proto-thread"]
 
 # aarch64 only: enter the kernel with `hvc #0` instead of `svc #0`.
 cpu-virt = ["l4-ipc-core/cpu-virt"]
