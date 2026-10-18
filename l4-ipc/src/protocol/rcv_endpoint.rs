@@ -69,26 +69,26 @@ impl Unmarshal for EndpointLabel {
     }
 }
 
-/// `l4_rcv_ep_bind_thread`: bind the endpoint to a thread, with a label.
+/// `l4_rcv_ep_bind_thread`: bind the endpoint to a receiver, with a label.
 ///
-/// The request carries the label as a word and the thread as a map item, an
-/// object flexpage with read, write and strong rights.  The capability of
-/// the endpoint needs the server right, and the thread capability the strong
-/// right.
+/// The request carries the label as a word and the receiver as a map item,
+/// an object flexpage with read, write and strong rights.  The receiver may
+/// be a thread or a thread group.  The capability of the endpoint needs the
+/// server right, and the receiver capability the strong right.
 pub struct Bind;
 
 /// The request of [`Bind`].
 pub struct BindRequest {
     pub label: EndpointLabel,
-    pub thread: CapIdx,
+    pub target: CapIdx,
 }
 
 impl Marshal for BindRequest {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
-        let thread = Fpage::<Object>::new(self.thread, Order::ZERO, CapRights::RWS)?;
+        let target = Fpage::<Object>::new(self.target, Order::ZERO, CapRights::RWS)?;
 
         self.label.marshal(w)?;
-        MapItem::new(thread, SndBase::default()).marshal(w)
+        MapItem::new(target, SndBase::default()).marshal(w)
     }
 }
 
@@ -134,16 +134,16 @@ mod tests {
     }
 
     #[test]
-    fn bind_sends_the_label_and_the_thread_as_an_item() {
+    fn bind_sends_the_label_and_the_target_as_an_item() {
         let utcb = Utcb::zeroed();
         let request = BindRequest {
             label: EndpointLabel::new(0x1230).unwrap(),
-            thread: CapIdx::from_index(3),
+            target: CapIdx::from_index(3),
         };
         let tag = encode_request::<Bind>(&utcb, &request).unwrap();
 
         // l4_rcv_ep_bind_thread: op 0x10 and the label as words, then
-        // l4_map_obj_control(0, 0) and l4_obj_fpage(thread, 0, RWS).
+        // l4_map_obj_control(0, 0) and l4_obj_fpage(target, 0, RWS).
         assert_eq!(
             (tag.label(), tag.words(), tag.items(), tag.flags()),
             (-10, 2, 1, TagFlags::NONE)
@@ -155,11 +155,11 @@ mod tests {
     }
 
     #[test]
-    fn bind_needs_a_valid_thread() {
+    fn bind_needs_a_valid_target() {
         let utcb = Utcb::zeroed();
         let request = BindRequest {
             label: EndpointLabel::default(),
-            thread: CapIdx::INVALID,
+            target: CapIdx::INVALID,
         };
 
         assert_eq!(

@@ -3,7 +3,7 @@ use l4_ipc_core::sys::Utcb;
 use l4_ipc_core::{Error, Timeout};
 
 use crate::protocol::rcv_endpoint::{Bind, BindRequest, EndpointLabel, RcvEndpoint as Protocol};
-use crate::protocol::thread::Thread;
+use crate::protocol::Bindable;
 
 /// Convenience methods for handles that speak the receive endpoint protocol.
 ///
@@ -40,33 +40,36 @@ use crate::protocol::thread::Thread;
 /// }
 /// ```
 pub trait RcvEndpoint: Speaks<Protocol> {
-    /// Bind the endpoint to the thread with the label
+    /// Bind the endpoint to the receiver with the label
     /// (`l4_rcv_ep_bind_thread`), using the given UTCB.
     ///
-    /// The endpoint is bound anew if it was bound before.  Messages that
-    /// are already in flight keep the old label.
-    fn bind_thread_with<T>(
+    /// The receiver may be a thread or a thread group.  The endpoint is
+    /// bound anew if it was bound before.  Messages that are already in
+    /// flight keep the old label.
+    fn bind_thread_with<T, P>(
         &self,
         utcb: &Utcb,
-        thread: &T,
+        target: &T,
         label: EndpointLabel,
     ) -> Result<(), Error>
     where
-        T: Speaks<Thread>,
+        T: Speaks<P>,
+        P: Bindable,
     {
         let request = BindRequest {
             label,
-            thread: thread.idx(),
+            target: target.idx(),
         };
         self.invoke_with::<Bind>(utcb, request, Timeout::NEVER)
     }
 
     /// See [`bind_thread_with`](RcvEndpoint::bind_thread_with).
-    fn bind_thread<T>(&self, thread: &T, label: EndpointLabel) -> Result<(), Error>
+    fn bind_thread<T, P>(&self, target: &T, label: EndpointLabel) -> Result<(), Error>
     where
-        T: Speaks<Thread>,
+        T: Speaks<P>,
+        P: Bindable,
     {
-        self.bind_thread_with(Utcb::current(), thread, label)
+        self.bind_thread_with(Utcb::current(), target, label)
     }
 }
 

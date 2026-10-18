@@ -1,5 +1,5 @@
 use super::rcv_endpoint::EndpointLabel;
-use super::thread::Thread;
+use super::Bindable;
 use l4_ipc_core::message::MapItem;
 use l4_ipc_core::protocol::{Creatable, Marshal, Operation, Protocol, Speaks, Uint, Writer};
 use l4_ipc_core::sys::{mword, umword};
@@ -36,11 +36,11 @@ impl Protocol for Gate {
     const PROTO: mword = 0;
 }
 
-/// What a new IPC gate is bound to: its label and, optionally, the thread.
+/// What a new IPC gate is bound to: its label and, optionally, a receiver.
 ///
-/// The request is the label as a variable argument and, if there is a thread,
-/// the thread as a map item (`l4_factory_create_gate`).  A gate without a
-/// thread is bound later with [`bind_thread`].
+/// The request is the label as a variable argument and, if there is a
+/// receiver, the receiver as a map item (`l4_factory_create_gate`).  A gate
+/// without a receiver is bound later with [`bind_thread`].
 ///
 /// ```no_run
 /// # #[cfg(feature = "proto-factory")]
@@ -64,7 +64,7 @@ impl Protocol for Gate {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct GateTarget {
     label: EndpointLabel,
-    thread: Option<CapIdx>,
+    target: Option<CapIdx>,
 }
 
 impl GateTarget {
@@ -72,15 +72,19 @@ impl GateTarget {
     pub const fn unbound(label: EndpointLabel) -> GateTarget {
         GateTarget {
             label,
-            thread: None,
+            target: None,
         }
     }
 
-    /// A gate that is bound to the thread.
-    pub fn bound<T: Speaks<Thread>>(label: EndpointLabel, thread: &T) -> GateTarget {
+    /// A gate that is bound to the receiver, a thread or a thread group.
+    pub fn bound<T, P>(label: EndpointLabel, target: &T) -> GateTarget
+    where
+        T: Speaks<P>,
+        P: Bindable,
+    {
         GateTarget {
             label,
-            thread: Some(thread.idx()),
+            target: Some(target.idx()),
         }
     }
 
@@ -88,9 +92,9 @@ impl GateTarget {
         self.label
     }
 
-    /// The selector of the thread, if the gate is bound to one.
-    pub const fn thread(&self) -> Option<CapIdx> {
-        self.thread
+    /// The selector of the receiver, if the gate is bound to one.
+    pub const fn target(&self) -> Option<CapIdx> {
+        self.target
     }
 }
 
@@ -98,9 +102,9 @@ impl Marshal for GateTarget {
     fn marshal(&self, w: &mut Writer<'_>) -> Result<(), Error> {
         Uint(self.label.get()).marshal(w)?;
 
-        if let Some(thread) = self.thread {
-            let thread = Fpage::<Object>::new(thread, Order::ZERO, CapRights::RWS)?;
-            MapItem::new(thread, SndBase::default()).marshal(w)?;
+        if let Some(target) = self.target {
+            let target = Fpage::<Object>::new(target, Order::ZERO, CapRights::RWS)?;
+            MapItem::new(target, SndBase::default()).marshal(w)?;
         }
         Ok(())
     }
@@ -190,7 +194,7 @@ mod tests {
         let utcb = Utcb::zeroed();
         let target = GateTarget {
             label: EndpointLabel::default(),
-            thread: Some(CapIdx::INVALID),
+            target: Some(CapIdx::INVALID),
         };
 
         assert_eq!(

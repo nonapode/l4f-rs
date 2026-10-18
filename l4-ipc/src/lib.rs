@@ -62,6 +62,18 @@ pub mod protocol {
         };
     }
     for_each_protocol!(protocol!);
+
+    use l4_ipc_core::protocol::Protocol;
+
+    /// A protocol whose objects an IPC gate or receive endpoint can be
+    /// bound to as a receiver: a thread or a thread group.
+    pub trait Bindable: Protocol {}
+
+    #[cfg(feature = "proto-thread")]
+    impl Bindable for thread::Thread {}
+
+    #[cfg(feature = "proto-thread_group")]
+    impl Bindable for thread_group::ThreadGroup {}
 }
 
 /// Handles for the kernel objects.  A handle is a capability that is typed
